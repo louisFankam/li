@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\UsesActivePharmacy;
 use App\Models\CashSession;
 use App\Models\Payment;
-use App\Models\Pharmacy;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class CashController extends Controller
 {
+    use UsesActivePharmacy;
+
     public function index(Request $request)
     {
         $pharmacy = $this->pharmacy($request);
@@ -47,10 +49,4 @@ class CashController extends Controller
         ]);
     }
 
-    protected function pharmacy(Request $request): Pharmacy
-    {
-        $u = $request->user();
-        $ph = $u->pharmacies()->first();
-        return $ph ?: Pharmacy::first();
-    }
 }

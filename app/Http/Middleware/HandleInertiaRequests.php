@@ -38,12 +38,37 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
+        $user = $request->user();
+        $pharmacies = $user
+            ? $user->pharmacies()->orderBy('name')->get(['pharmacies.id', 'name', 'city'])
+            : collect();
+
+        $activePharmacyId = $request->session()->get('active_pharmacy_id');
+        if ($activePharmacyId && ! $pharmacies->contains('id', (int) $activePharmacyId)) {
+            $activePharmacyId = null;
+        }
+
         return array_merge(parent::share($request), [
-            ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user
+                    ? [
+                        ...$user->toArray(),
+                        'role' => $user->pharmacies()->first()?->pivot?->role,
+                    ]
+                    : null,
+            ],
+            'pharmacies' => $pharmacies->map(fn ($pharmacy) => [
+                'id' => $pharmacy->id,
+                'name' => $pharmacy->name,
+                'short' => str_replace('Pharmacie ', '', $pharmacy->name),
+                'city' => $pharmacy->city,
+            ])->values(),
+            'activePharmacyId' => $activePharmacyId,
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
         ]);
     }

@@ -4,6 +4,7 @@ import * as icons from 'lucide-vue-next';
 import { computed } from 'vue';
 
 interface Props {
+    /** Nom Lucide en kebab-case, comme dans la maquette : "triangle-alert". */
     name: string;
     class?: string;
     size?: number | string;
@@ -13,18 +14,23 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
     class: '',
-    size: 16,
+    size: 18,
     strokeWidth: 2,
 });
 
-const className = computed(() => cn('h-4 w-4', props.class));
+const className = computed(() => cn('shrink-0', props.class));
 
 const icon = computed(() => {
-    const iconName = props.name.charAt(0).toUpperCase() + props.name.slice(1);
-    return (icons as Record<string, any>)[iconName];
+    const pascal = props.name
+        .split('-')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
+
+    return (icons as Record<string, unknown>)[pascal] ?? icons.Circle;
 });
 </script>
 
 <template>
-    <component :is="icon" :class="className" :size="size" :stroke-width="strokeWidth" :color="color" />
+    <component :is="icon" :class="className" :size="Number(size)" :stroke-width="strokeWidth" :color="color" />
 </template>

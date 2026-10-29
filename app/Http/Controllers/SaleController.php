@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\UsesActivePharmacy;
 use App\Models\Customer;
 use App\Models\InsuranceClaim;
 use App\Models\InsuranceCompany;
 use App\Models\Payment;
-use App\Models\Pharmacy;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -18,6 +18,8 @@ use Inertia\Inertia;
 
 class SaleController extends Controller
 {
+    use UsesActivePharmacy;
+
     public function index(Request $request)
     {
         $pharmacy = $this->pharmacy($request);
@@ -145,10 +147,4 @@ class SaleController extends Controller
         });
     }
 
-    protected function pharmacy(Request $request): Pharmacy
-    {
-        $u = $request->user();
-        $ph = $u->pharmacies()->first();
-        return $ph ?: Pharmacy::first();
-    }
 }

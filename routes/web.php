@@ -38,6 +38,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('categories', CategoryController::class)->only(['index','store','update','destroy']);
     Route::resource('suppliers', SupplierController::class)->only(['index','store','update','destroy']);
     Route::resource('pharmacies', PharmacyController::class)->only(['index','store','update','destroy']);
+    Route::post('pharmacies/active', [PharmacyController::class, 'activate'])->name('pharmacies.activate');
     Route::resource('users', UserController::class)->only(['index','store','update','destroy']);
     Route::resource('customers', CustomerController::class)->only(['index','store','destroy']);
     Route::resource('insurers', InsuranceCompanyController::class)->only(['index','store','destroy']);

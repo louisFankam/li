@@ -106,10 +106,10 @@ onMounted(() => {
                     </Button>
                 </form>
 
-                <div class="mt-6 text-center text-sm text-slate-500">
-                    Pas encore de compte ?
-                    <TextLink :href="route('register')"> Créer un compte </TextLink>
-                </div>
+                <p class="mt-6 text-center text-xs text-slate-500">
+                    Accès réservé au personnel PharmaGest. Contactez votre pharmacien titulaire pour
+                    la création de votre compte.
+                </p>
             </div>
         </div>
     </div>

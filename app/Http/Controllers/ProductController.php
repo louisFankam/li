@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\UsesActivePharmacy;
 use App\Models\Category;
 use App\Models\Pharmacy;
 use App\Models\Product;
@@ -11,6 +12,8 @@ use Inertia\Inertia;
 
 class ProductController extends Controller
 {
+    use UsesActivePharmacy;
+
     public function index(Request $request)
     {
         $pharmacy = $this->pharmacy($request);
@@ -95,10 +98,4 @@ class ProductController extends Controller
         return redirect()->back()->with('success', 'Produit désactivé');
     }
 
-    protected function pharmacy(Request $request)
-    {
-        $u = $request->user();
-        $ph = $u->pharmacies()->first();
-        return $ph ?: Pharmacy::first();
-    }
 }

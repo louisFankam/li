@@ -46,4 +46,24 @@ class PharmacyController extends Controller
         $pharmacy->delete();
         return redirect()->back()->with('success', 'Pharmacie supprimée');
     }
+
+    /**
+     * Change la pharmacie active (sélecteur de la Topbar). `null` = vue consolidée.
+     */
+    public function activate(Request $request)
+    {
+        $data = $request->validate([
+            'pharmacy_id' => 'nullable|integer|exists:pharmacies,id',
+        ]);
+
+        if (! empty($data['pharmacy_id'])) {
+            $allowed = $request->user()->pharmacies()->whereKey($data['pharmacy_id'])->exists();
+            abort_unless($allowed, 403);
+            $request->session()->put('active_pharmacy_id', (int) $data['pharmacy_id']);
+        } else {
+            $request->session()->forget('active_pharmacy_id');
+        }
+
+        return redirect()->back();
+    }
 }
