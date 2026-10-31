@@ -2,29 +2,48 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\UsesActivePharmacy;
+use App\Http\Requests\ReceiveTransferRequest;
+use App\Http\Requests\ShipTransferRequest;
+use App\Http\Requests\StoreTransferRequest;
 use App\Models\Pharmacy;
 use App\Models\Product;
-use App\Models\StockLevel;
-use App\Models\StockMovement;
 use App\Models\Transfer;
 use App\Models\TransferItem;
-use App\Models\User;
+use App\Services\AuditLogger;
+use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TransferController extends Controller
 {
+    use UsesActivePharmacy;
+
     public function index()
     {
+        $this->authorize('viewAny', Transfer::class);
+        $context = $this->context();
+        $ids = $context->accessibleIds();
+
         $transfers = Transfer::with(['fromPharmacy', 'toPharmacy', 'items.product', 'requester'])
-            ->latest()->get()->map(fn($t) => [
+            ->where(function ($query) use ($ids) {
+                $query->whereIn('from_pharmacy_id', $ids)
+                    ->orWhereIn('to_pharmacy_id', $ids);
+            })
+            ->latest()
+            ->get()
+            ->map(fn ($t) => [
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'from' => $t->fromPharmacy->name,
+                'from_id' => $t->from_pharmacy_id,
                 'to' => $t->toPharmacy->name,
+                'to_id' => $t->to_pharmacy_id,
                 'status' => $t->status,
-                'items' => $t->items->map(fn($i) => [
+                'items' => $t->items->map(fn ($i) => [
                     'id' => $i->id,
                     'product' => $i->product->name,
                     'product_id' => $i->product_id,
@@ -34,119 +53,225 @@ class TransferController extends Controller
                 ]),
                 'date' => $t->created_at->format('d M · H:i'),
             ]);
+
         return Inertia::render('Transfers', [
             'transfers' => $transfers,
-            'pharmacies' => Pharmacy::orderBy('name')->get(),
+            'pharmacies' => Pharmacy::whereIn('id', $ids)->orderBy('name')->get(),
             'products' => Product::where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreTransferRequest $request)
     {
-        $data = $request->validate([
-            'from_pharmacy_id' => 'required|exists:pharmacies,id',
-            'to_pharmacy_id' => 'required|exists:pharmacies,id|different:from_pharmacy_id',
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'notes' => 'nullable|string',
-        ]);
-        $ref = 'TRF-' . (Transfer::count() + 232);
-        $t = Transfer::create([
-            'reference' => $ref,
-            'from_pharmacy_id' => $data['from_pharmacy_id'],
-            'to_pharmacy_id' => $data['to_pharmacy_id'],
-            'status' => 'valide',
-            'requested_by' => $request->user()->id,
-            'notes' => $data['notes'] ?? null,
-        ]);
-        foreach ($data['items'] as $it) {
-            TransferItem::create([
-                'transfer_id' => $t->id,
-                'product_id' => $it['product_id'],
-                'quantity_requested' => $it['quantity'],
+        $data = $request->validated();
+
+        abort_unless($this->context()->canAccess((int) $data['from_pharmacy_id']), 404);
+        abort_unless($this->context()->canAccess((int) $data['to_pharmacy_id']), 404);
+
+        DB::transaction(function () use ($data, $request) {
+            $transfer = Transfer::create([
+                'reference' => 'TRF-'.Str::ulid(),
+                'from_pharmacy_id' => $data['from_pharmacy_id'],
+                'to_pharmacy_id' => $data['to_pharmacy_id'],
+                'status' => 'valide',
+                'requested_by' => $request->user()->id,
+                'notes' => $data['notes'] ?? null,
             ]);
-        }
+
+            foreach ($data['items'] as $item) {
+                TransferItem::create([
+                    'transfer_id' => $transfer->id,
+                    'product_id' => $item['product_id'],
+                    'quantity_requested' => (int) $item['quantity'],
+                ]);
+            }
+
+            app(AuditLogger::class)->log('transfer.created', Transfer::class, $transfer->id, [], [
+                'from' => $data['from_pharmacy_id'],
+                'to' => $data['to_pharmacy_id'],
+            ]);
+        });
+
         return redirect()->back()->with('success', 'Transfert créé');
     }
 
-    public function ship(Request $request, Transfer $transfer)
+    public function ship(ShipTransferRequest $request, Transfer $transfer, StockService $stock)
     {
-        if ($transfer->status !== 'valide') {
-            return redirect()->back()->with('error', 'Statut invalide');
-        }
-        DB::transaction(function () use ($transfer) {
-            foreach ($transfer->items as $item) {
-                $sl = StockLevel::where('pharmacy_id', $transfer->from_pharmacy_id)
-                    ->where('product_id', $item->product_id)->lockForUpdate()->first();
-                $qty = $item->quantity_requested;
-                if (!$sl || $sl->quantity < $qty) {
-                    throw new \RuntimeException('Stock insuffisant pour expédition');
-                }
-                $sl->decrement('quantity', $qty);
-                $item->update(['quantity_shipped' => $qty]);
-                StockMovement::create([
-                    'pharmacy_id' => $transfer->from_pharmacy_id,
-                    'product_id' => $item->product_id,
-                    'type' => 'transfert_sortant',
-                    'quantity' => -$qty,
-                    'reference_type' => 'transfer',
-                    'reference_id' => $transfer->id,
-                    'user_id' => request()->user()->id,
+        $this->authorize('ship', $transfer);
+        $data = $request->validated();
+
+        DB::transaction(function () use ($transfer, $data, $request, $stock) {
+            $transfer = Transfer::whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($transfer->status, ['valide', 'partiellement_expedie'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Ce transfert ne peut plus être expédié.',
                 ]);
             }
-            $transfer->update(['status' => 'expedie', 'shipped_at' => now()]);
+
+            $payload = collect($data['items'] ?? [])->keyBy('id');
+            $shippedSomething = false;
+
+            foreach ($transfer->items as $item) {
+                $remaining = $item->quantity_requested - $item->quantity_shipped;
+                $requested = $payload->has($item->id)
+                    ? (int) $payload[$item->id]['quantity_shipped']
+                    : $remaining;
+
+                if ($requested < 0 || $requested > $remaining) {
+                    throw ValidationException::withMessages([
+                        'items' => 'La quantité expédiée dépasse la quantité restante.',
+                    ]);
+                }
+
+                if ($requested === 0) {
+                    continue;
+                }
+
+                $stock->apply(
+                    $transfer->from_pharmacy_id,
+                    $item->product_id,
+                    -$requested,
+                    'transfert_sortant',
+                    null,
+                    $request->user()->id,
+                    'transfer',
+                    $transfer->id
+                );
+
+                $item->update(['quantity_shipped' => $item->quantity_shipped + $requested]);
+                $shippedSomething = true;
+            }
+
+            if (! $shippedSomething) {
+                throw ValidationException::withMessages([
+                    'items' => 'Aucune quantité à expédier.',
+                ]);
+            }
+
+            $items = TransferItem::where('transfer_id', $transfer->id)->get();
+            $allShipped = $items->every(fn (TransferItem $i) => $i->quantity_shipped >= $i->quantity_requested);
+
+            $transfer->update([
+                'status' => $allShipped ? 'expedie' : 'partiellement_expedie',
+                'shipped_at' => $transfer->shipped_at ?? now(),
+            ]);
+
+            app(AuditLogger::class)->log('transfer.shipped', Transfer::class, $transfer->id, [], [
+                'status' => $transfer->status,
+            ]);
         });
+
         return redirect()->back()->with('success', 'Transfert expédié');
     }
 
-    public function receive(Request $request, Transfer $transfer)
+    public function receive(ReceiveTransferRequest $request, Transfer $transfer, StockService $stock)
     {
-        if (!in_array($transfer->status, ['expedie', 'partiellement_recu'])) {
-            return redirect()->back()->with('error', 'Statut invalide');
-        }
-        $data = $request->validate([
-            'items' => 'required|array',
-            'items.*.id' => 'required|exists:transfer_items,id',
-            'items.*.quantity_received' => 'required|integer|min:0',
-        ]);
-        DB::transaction(function () use ($transfer, $data) {
-            $totalReceived = 0;
-            $totalRequested = 0;
-            foreach ($data['items'] as $it) {
-                $item = TransferItem::find($it['id']);
-                $prev = $item->quantity_received;
-                $new = $it['quantity_received'];
-                $delta = $new - $prev;
-                if ($delta > 0) {
-                    StockLevel::firstOrCreate(['pharmacy_id' => $transfer->to_pharmacy_id, 'product_id' => $item->product_id], ['quantity' => 0])
-                        ->increment('quantity', $delta);
-                    StockMovement::create([
-                        'pharmacy_id' => $transfer->to_pharmacy_id,
-                        'product_id' => $item->product_id,
-                        'type' => 'transfert_entrant',
-                        'quantity' => $delta,
-                        'reference_type' => 'transfer',
-                        'reference_id' => $transfer->id,
-                        'user_id' => request()->user()->id,
+        $this->authorize('receive', $transfer);
+        $data = $request->validated();
+
+        DB::transaction(function () use ($transfer, $data, $request, $stock) {
+            $transfer = Transfer::whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($transfer->status, ['expedie', 'partiellement_expedie', 'partiellement_recu'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Ce transfert n’est pas en attente de réception.',
+                ]);
+            }
+
+            foreach ($data['items'] as $payload) {
+                $item = TransferItem::whereKey($payload['id'])
+                    ->where('transfer_id', $transfer->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $item) {
+                    throw ValidationException::withMessages(['items' => 'Une ligne ne correspond pas à ce transfert.']);
+                }
+
+                $previous = $item->quantity_received;
+                $new = (int) $payload['quantity_received'];
+
+                if ($new < $previous || $new > $item->quantity_shipped) {
+                    throw ValidationException::withMessages([
+                        'items' => 'La quantité reçue doit être comprise entre la quantité déjà reçue et la quantité expédiée.',
                     ]);
                 }
+
+                $delta = $new - $previous;
+                if ($delta > 0) {
+                    $stock->apply(
+                        $transfer->to_pharmacy_id,
+                        $item->product_id,
+                        $delta,
+                        'transfert_entrant',
+                        null,
+                        $request->user()->id,
+                        'transfer',
+                        $transfer->id
+                    );
+                }
+
                 $item->update(['quantity_received' => $new]);
-                $totalReceived += $new;
-                $totalRequested += $item->quantity_requested;
             }
-            if ($totalReceived >= $totalRequested) {
-                $transfer->update(['status' => 'recu', 'received_at' => now()]);
-            } else {
-                $transfer->update(['status' => 'partiellement_recu']);
-            }
+
+            // État recalculé sur toutes les lignes : un payload partiel ne doit
+            // pas clôturer le transfert.
+            $items = TransferItem::where('transfer_id', $transfer->id)->get();
+            $allReceived = $items->every(fn (TransferItem $i) => $i->quantity_received >= $i->quantity_shipped);
+
+            $transfer->update([
+                'status' => $allReceived ? 'recu' : 'partiellement_recu',
+                'received_at' => $allReceived ? now() : null,
+            ]);
+
+            app(AuditLogger::class)->log('transfer.received', Transfer::class, $transfer->id, [], [
+                'status' => $transfer->status,
+            ]);
         });
+
         return redirect()->back()->with('success', 'Réception enregistrée');
     }
 
-    public function cancel(Transfer $transfer)
+    public function cancel(Request $request, Transfer $transfer, StockService $stock)
     {
-        $transfer->update(['status' => 'annule']);
+        $this->authorize('cancel', $transfer);
+
+        DB::transaction(function () use ($transfer, $request, $stock) {
+            $transfer = Transfer::whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+
+            if (in_array($transfer->status, ['recu', 'annule'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Ce transfert ne peut plus être annulé.',
+                ]);
+            }
+
+            // Si déjà expédié, on remet le stock non reçu dans la pharmacie source.
+            foreach ($transfer->items as $item) {
+                $restock = $item->quantity_shipped - $item->quantity_received;
+                if ($restock <= 0) {
+                    continue;
+                }
+
+                $stock->apply(
+                    $transfer->from_pharmacy_id,
+                    $item->product_id,
+                    $restock,
+                    'transfert_annule',
+                    null,
+                    $request->user()->id,
+                    'transfer',
+                    $transfer->id
+                );
+            }
+
+            $transfer->update(['status' => 'annule']);
+
+            app(AuditLogger::class)->log('transfer.cancelled', Transfer::class, $transfer->id, [], [
+                'status' => 'annule',
+            ]);
+        });
+
         return redirect()->back()->with('success', 'Transfert annulé');
     }
 }

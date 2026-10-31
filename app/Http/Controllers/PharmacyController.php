@@ -2,49 +2,56 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StorePharmacyRequest;
 use App\Models\Pharmacy;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class PharmacyController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Inertia::render('Pharmacies', ['pharmacies' => Pharmacy::orderBy('name')->get()]);
+        $this->authorize('manage_pharmacies');
+
+        return Inertia::render('Pharmacies', [
+            'pharmacies' => Pharmacy::withCount(['sales', 'users'])->orderBy('name')->get(),
+        ]);
     }
 
-    public function store(Request $request)
+    public function store(StorePharmacyRequest $request)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:120',
-            'city' => 'nullable|string|max:120',
-            'address' => 'nullable|string',
-            'phone' => 'nullable|string|max:40',
-            'is_active' => 'boolean',
-        ]);
+        $data = $request->validated();
         $data['is_active'] = $request->boolean('is_active', true);
-        Pharmacy::create($data);
+        $pharmacy = Pharmacy::create($data);
+
+        app(AuditLogger::class)->log('pharmacy.created', Pharmacy::class, $pharmacy->id, [], $pharmacy->toArray());
+
         return redirect()->back()->with('success', 'Pharmacie créée');
     }
 
-    public function update(Request $request, Pharmacy $pharmacy)
+    public function update(StorePharmacyRequest $request, Pharmacy $pharmacy)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:120',
-            'city' => 'nullable|string|max:120',
-            'address' => 'nullable|string',
-            'phone' => 'nullable|string|max:40',
-            'is_active' => 'boolean',
-        ]);
+        $old = $pharmacy->toArray();
+        $data = $request->validated();
         $data['is_active'] = $request->boolean('is_active', $pharmacy->is_active);
         $pharmacy->update($data);
+
+        app(AuditLogger::class)->log('pharmacy.updated', Pharmacy::class, $pharmacy->id, $old, $pharmacy->fresh()?->toArray() ?? []);
+
         return redirect()->back()->with('success', 'Pharmacie mise à jour');
     }
 
     public function destroy(Pharmacy $pharmacy)
     {
-        $pharmacy->delete();
-        return redirect()->back()->with('success', 'Pharmacie supprimée');
+        $this->authorize('delete', $pharmacy);
+
+        $old = $pharmacy->toArray();
+        $pharmacy->update(['is_active' => false]);
+
+        app(AuditLogger::class)->log('pharmacy.disabled', Pharmacy::class, $pharmacy->id, $old, ['is_active' => false]);
+
+        return redirect()->back()->with('success', 'Pharmacie désactivée');
     }
 
     /**
@@ -58,7 +65,7 @@ class PharmacyController extends Controller
 
         if (! empty($data['pharmacy_id'])) {
             $allowed = $request->user()->pharmacies()->whereKey($data['pharmacy_id'])->exists();
-            abort_unless($allowed, 403);
+            abort_unless($allowed || $request->user()->is_super_admin, 403);
             $request->session()->put('active_pharmacy_id', (int) $data['pharmacy_id']);
         } else {
             $request->session()->forget('active_pharmacy_id');

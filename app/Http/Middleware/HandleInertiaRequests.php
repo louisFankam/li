@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Permissions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -43,10 +44,22 @@ class HandleInertiaRequests extends Middleware
             ? $user->pharmacies()->orderBy('name')->get(['pharmacies.id', 'name', 'city'])
             : collect();
 
-        $activePharmacyId = $request->session()->get('active_pharmacy_id');
+        // La pharmacie active est résolue par le contexte (session + fallback
+        // sur la première pharmacie accessible), afin que la Topbar et la
+        // Sidebar reflètent toujours le site réellement utilisé.
+        $activePharmacy = $user?->currentPharmacy();
+        $activePharmacyId = $activePharmacy?->id;
         if ($activePharmacyId && ! $pharmacies->contains('id', (int) $activePharmacyId)) {
             $activePharmacyId = null;
         }
+
+        $role = $user?->roleFor($activePharmacy);
+        $permissions = $user
+            ? collect(Permissions::all())
+                ->filter(fn (string $permission) => $user->hasPermission($permission))
+                ->values()
+                ->all()
+            : [];
 
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
@@ -55,9 +68,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user
                     ? [
                         ...$user->toArray(),
-                        'role' => $user->pharmacies()->first()?->pivot?->role,
+                        'role' => $role,
                     ]
                     : null,
+                'permissions' => $permissions,
             ],
             'pharmacies' => $pharmacies->map(fn ($pharmacy) => [
                 'id' => $pharmacy->id,

@@ -29,12 +29,15 @@ createInertiaApp({
         createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)
+            .use(createPinia())
             .mount(el);
     },
     progress: {
         color: '#0e9f6e',
     },
 });
+
+import { createPinia } from 'pinia';
 
 // This will set light / dark mode on page load...
 initializeTheme();

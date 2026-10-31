@@ -1,106 +1,261 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
+import { ArrowDownCircle, ArrowUpCircle, LockKeyhole, UnlockKeyhole } from 'lucide-vue-next';
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Caisses & Finances', href: '/caisses' }];
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Caisses & Dépenses', href: '/caisses' }];
 
-defineProps<{
-    pharmacy: { id: number; name: string; city: string };
-    sessions: { caisse: string; user: string; espece: string; mobile: string; ecart: string; ok: boolean }[];
-    totals: { encaisse: string; depenses: string; fond: string; resultat: string };
+type Session = {
+    id: number;
+    caisse: string;
+    user: string;
+    status: string;
+    opening: string;
+    closing: string;
+    expected: string;
+    difference: string;
+    difference_raw: number | null;
+    ok: boolean;
+    opened_at: string | null;
+    closed_at: string | null;
+};
+
+type Movement = {
+    id: number;
+    type: string;
+    amount: string;
+    amount_raw: number;
+    reason: string | null;
+    user: string | null;
+    at: string;
+};
+
+const props = defineProps<{
+    pharmacy: { id: number; name: string };
+    sessions: Session[];
+    totals: { encaisse: string; fond: string; attendu: string };
+    openSession: number | null;
+    openSessionInfo: {
+        id: number;
+        opening: number;
+        opened_at: string | null;
+        expected: number | null;
+        movements: Movement[];
+    } | null;
 }>();
+
+const money = (value: number) => value.toLocaleString('fr-FR') + ' GNF';
+
+const openForm = useForm({ opening_amount: 0 });
+const closeForm = useForm({ closing_amount: 0, notes: '' });
+const moveForm = useForm({ type: 'entree', amount: 0, reason: '' });
+
+function openSession() {
+    openForm.post(route('caisses.open'), { preserveScroll: true, onSuccess: () => openForm.reset() });
+}
+
+function closeSession(id: number) {
+    closeForm.post(route('caisses.close', id), { preserveScroll: true, onSuccess: () => closeForm.reset() });
+}
+
+function movement(id: number) {
+    moveForm.post(route('caisses.movement', id), {
+        preserveScroll: true,
+        onSuccess: () => moveForm.reset('amount', 'reason'),
+    });
+}
+
+function fillExpected() {
+    if (props.openSessionInfo?.expected != null) {
+        closeForm.closing_amount = props.openSessionInfo.expected;
+    }
+}
 </script>
 
 <template>
-    <Head title="Caisses & Finances" />
+    <Head title="Caisses" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-5 p-8">
-            <div class="grid grid-cols-4 gap-4">
-                <div class="bg-card border border-border rounded-lg p-5 flex items-center gap-4">
-                    <div class="w-11 h-11 rounded-md bg-secondary text-secondary-foreground flex items-center justify-center"></div>
-                    <div><div class="text-xs text-muted-foreground font-medium">Encaissé aujourd’hui</div><div class="font-headings font-bold text-xl">{{ totals.encaisse }}</div><div class="text-xs text-accent font-medium">Espèces 62 % · Mobile 38 %</div></div>
+        <div class="flex flex-col gap-5 p-4 lg:p-8">
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div class="rounded-lg border border-border bg-card p-5">
+                    <div class="text-xs font-medium text-muted-foreground">Encaissé aujourd'hui (espèces)</div>
+                    <div class="font-headings text-xl font-bold">{{ totals.encaisse }}</div>
                 </div>
-                <div class="bg-card border border-border rounded-lg p-5 flex items-center gap-4">
-                    <div class="w-11 h-11 rounded-md bg-secondary text-secondary-foreground flex items-center justify-center"></div>
-                    <div><div class="text-xs text-muted-foreground font-medium">Dépenses du jour</div><div class="font-headings font-bold text-xl">{{ totals.depenses }}</div><div class="text-xs text-gold font-medium">7 pièces · 1 en attente</div></div>
+                <div class="rounded-lg border border-border bg-card p-5">
+                    <div class="text-xs font-medium text-muted-foreground">Fond de caisse</div>
+                    <div class="font-headings text-xl font-bold">{{ totals.fond }}</div>
                 </div>
-                <div class="bg-card border border-border rounded-lg p-5 flex items-center gap-4">
-                    <div class="w-11 h-11 rounded-md bg-secondary text-secondary-foreground flex items-center justify-center"></div>
-                    <div><div class="text-xs text-muted-foreground font-medium">Fond de caisse total</div><div class="font-headings font-bold text-xl">{{ totals.fond }}</div><div class="text-xs text-accent font-medium">3 caisses ouvertes</div></div>
-                </div>
-                <div class="bg-card border border-border rounded-lg p-5 flex items-center gap-4">
-                    <div class="w-11 h-11 rounded-md bg-secondary text-secondary-foreground flex items-center justify-center"></div>
-                    <div><div class="text-xs text-muted-foreground font-medium">Résultat net estimé</div><div class="font-headings font-bold text-xl">{{ totals.resultat }}</div><div class="text-xs text-accent font-medium">Marge 28 % après charges</div></div>
+                <div class="rounded-lg border border-border bg-card p-5">
+                    <div class="text-xs font-medium text-muted-foreground">Montant attendu</div>
+                    <div class="font-headings text-xl font-bold">{{ totals.attendu }}</div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="bg-card border border-border rounded-lg p-6">
-                    <div class="flex items-center justify-between">
-                        <div class="font-headings font-bold text-lg">État des caisses — en direct</div>
-                        <button class="text-sm font-medium bg-dark text-white rounded-md px-4 py-2 flex items-center gap-2"> Clôturer ma caisse</button>
+            <div v-if="!openSessionInfo" class="rounded-lg border border-border bg-card p-5">
+                <div class="mb-3 flex items-center gap-2 font-headings text-lg font-bold">
+                    <UnlockKeyhole class="h-5 w-5 text-primary" /> Ouvrir une session de caisse
+                </div>
+                <form class="flex flex-wrap items-end gap-3" @submit.prevent="openSession">
+                    <div class="flex flex-col gap-1">
+                        <label for="opening" class="text-xs text-muted-foreground">Fond initial (GNF)</label>
+                        <input
+                            id="opening"
+                            v-model.number="openForm.opening_amount"
+                            type="number"
+                            min="0"
+                            class="rounded-md border border-border bg-input px-3 py-2 text-sm"
+                        />
                     </div>
-                    <div class="flex flex-col gap-3 mt-4">
-                        <div v-for="c in sessions" :key="c.caisse" class="border border-border rounded-md p-4">
-                            <div class="flex items-center justify-between">
-                                <div class="font-medium text-sm">{{ c.caisse }}</div>
-                                <span :class="['text-xs font-medium px-2 py-1 rounded-sm', c.ok ? 'bg-success-soft text-accent' : 'bg-warning-soft text-gold']">Écart {{ c.ecart }}</span>
+                    <button
+                        type="submit"
+                        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        :disabled="openForm.processing"
+                    >
+                        Ouvrir la caisse
+                    </button>
+                </form>
+            </div>
+
+            <div v-else class="grid gap-4 lg:grid-cols-3">
+                <div class="rounded-lg border border-border bg-card p-5 lg:col-span-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 font-headings text-lg font-bold">
+                            <LockKeyhole class="h-5 w-5 text-primary" /> Caisse ouverte
+                        </div>
+                        <span class="text-xs text-muted-foreground">Depuis {{ openSessionInfo.opened_at }}</span>
+                    </div>
+                    <div class="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                        <div>
+                            <div class="text-xs text-muted-foreground">Fond initial</div>
+                            <div class="font-medium">{{ money(openSessionInfo.opening) }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted-foreground">Mouvements</div>
+                            <div class="font-medium">
+                                {{ money(openSessionInfo.movements.reduce((s, m) => s + (m.type === 'entree' ? m.amount_raw : -m.amount_raw), 0)) }}
                             </div>
-                            <div class="text-xs text-muted-foreground">{{ c.user }}</div>
-                            <div class="grid grid-cols-3 gap-2 mt-3 text-sm">
-                                <div class="bg-muted/60 rounded-sm px-3 py-2"><div class="text-xs text-muted-foreground">Espèces</div><div class="font-bold">{{ c.espece }}</div></div>
-                                <div class="bg-muted/60 rounded-sm px-3 py-2"><div class="text-xs text-muted-foreground">Mobile Money</div><div class="font-bold">{{ c.mobile }}</div></div>
-                                <div class="border border-dashed border-border rounded-sm px-3 py-2 flex items-center justify-center gap-2 text-accent font-medium text-[13px]"> Z de caisse</div>
-                            </div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted-foreground">Attendu en caisse</div>
+                            <div class="font-bold text-accent">{{ openSessionInfo.expected != null ? money(openSessionInfo.expected) : '—' }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <div class="mb-2 text-sm font-medium">Mouvements de la session</div>
+                        <div v-if="openSessionInfo.movements.length === 0" class="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                            Aucun mouvement pour l'instant.
+                        </div>
+                        <div v-for="m in openSessionInfo.movements" :key="m.id" class="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                            <span class="flex items-center gap-2">
+                                <ArrowUpCircle v-if="m.type === 'entree'" class="h-4 w-4 text-accent" />
+                                <ArrowDownCircle v-else class="h-4 w-4 text-danger" />
+                                {{ m.reason || (m.type === 'entree' ? 'Entrée' : 'Retrait') }}
+                                <span class="text-xs text-muted-foreground">· {{ m.user }} · {{ m.at }}</span>
+                            </span>
+                            <span :class="m.type === 'entree' ? 'text-accent' : 'text-danger'">
+                                {{ m.type === 'entree' ? '+' : '−' }}{{ money(m.amount_raw) }}
+                            </span>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex flex-col gap-4">
-                    <div class="bg-card border border-border rounded-lg p-6">
-                        <div class="flex items-center justify-between">
-                            <div class="font-headings font-bold text-lg">Répartition des paiements</div>
-                            <span class="text-xs text-muted-foreground">7 derniers jours</span>
-                        </div>
-                        <div class="flex h-4 rounded-full overflow-hidden mt-4">
-                            <div class="bg-primary" style="width:52%"></div>
-                            <div class="bg-dark" style="width:24%"></div>
-                            <div class="bg-info" style="width:16%"></div>
-                            <div class="bg-warning" style="width:8%"></div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mt-4 text-sm">
-                            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-primary" /> Espèces — 52 %</span>
-                            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-dark" /> Assurances — 24 %</span>
-                            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-info" /> Orange / MTN MoMo — 16 %</span>
-                            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-warning" /> Carte / virement — 8 %</span>
-                        </div>
-                        <div class="mt-4 border-t border-border pt-4 flex items-center justify-between text-sm">
-                            <span class="text-muted-foreground">Clôture d’hier validée · écarts 0</span>
-                            <a class="font-medium text-primary">Voir le Z</a>
-                        </div>
+                    <div class="rounded-lg border border-border bg-card p-5">
+                        <div class="mb-3 text-sm font-medium">Nouveau mouvement</div>
+                        <form class="flex flex-col gap-2" @submit.prevent="movement(openSessionInfo.id)">
+                            <select v-model="moveForm.type" class="rounded-md border border-border bg-input px-3 py-2 text-sm" aria-label="Type de mouvement">
+                                <option value="entree">Entrée de caisse</option>
+                                <option value="retrait">Retrait / dépense</option>
+                            </select>
+                            <input
+                                v-model.number="moveForm.amount"
+                                type="number"
+                                min="1"
+                                placeholder="Montant (GNF)"
+                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
+                                aria-label="Montant"
+                            />
+                            <input
+                                v-model="moveForm.reason"
+                                type="text"
+                                maxlength="500"
+                                placeholder="Motif"
+                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
+                                aria-label="Motif"
+                            />
+                            <button
+                                type="submit"
+                                class="rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground disabled:opacity-60"
+                                :disabled="moveForm.processing"
+                            >
+                                Enregistrer le mouvement
+                            </button>
+                        </form>
                     </div>
 
-                    <div class="bg-card border border-border rounded-lg p-6">
-                        <div class="flex items-center justify-between">
-                            <div class="font-headings font-bold text-lg">Dépenses récentes</div>
-                            <button class="text-sm font-medium border border-border rounded-md px-3.5 py-2 flex items-center gap-2">+ Saisir dépense</button>
-                        </div>
-                        <div class="flex flex-col gap-2.5 mt-4">
-                            <div v-for="e in [{label:'Loyer octobre — local Ratoma',cat:'Exploitation',montant:'8 500 000 GNF',by:'Dr. Touré · 26 oct',statut:'Validée'},{label:'Carburant groupe électrogène',cat:'Logistique',montant:'1 200 000 GNF',by:'S. Keïta · 27 oct',statut:'En attente'},{label:'Prime gardiennage nuit',cat:'Personnel',montant:'650 000 GNF',by:'A. Diallo · 28 oct',statut:'Validée'}]" :key="e.label" class="flex items-center gap-3 border border-border rounded-md px-3.5 py-3">
-                                <div class="w-9 h-9 rounded-md bg-muted flex items-center justify-center"></div>
-                                <div class="flex-1">
-                                    <div class="text-sm font-medium">{{ e.label }}</div>
-                                    <div class="text-xs text-muted-foreground">{{ e.cat }} · {{ e.by }}</div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="font-bold text-sm">{{ e.montant }}</div>
-                                    <div :class="['text-xs font-medium', e.statut === 'Validée' ? 'text-accent' : 'text-gold']">{{ e.statut }}</div>
-                                </div>
+                    <div class="rounded-lg border border-border bg-card p-5">
+                        <div class="mb-3 text-sm font-medium">Clôturer la caisse</div>
+                        <form class="flex flex-col gap-2" @submit.prevent="closeSession(openSessionInfo.id)">
+                            <div class="flex gap-2">
+                                <input
+                                    v-model.number="closeForm.closing_amount"
+                                    type="number"
+                                    min="0"
+                                    placeholder="Montant compté"
+                                    class="min-w-0 flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm"
+                                    aria-label="Montant compté"
+                                />
+                                <button type="button" class="rounded-md border border-border px-3 py-2 text-xs" @click="fillExpected">
+                                    Attendu
+                                </button>
                             </div>
+                            <textarea
+                                v-model="closeForm.notes"
+                                rows="2"
+                                maxlength="1000"
+                                placeholder="Notes de clôture (optionnel)"
+                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
+                            ></textarea>
+                            <button
+                                type="submit"
+                                class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                                :disabled="closeForm.processing"
+                            >
+                                Clôturer
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="overflow-hidden rounded-lg border border-border bg-card">
+                <div class="p-5 font-headings text-lg font-bold">Historique des sessions</div>
+                <div class="overflow-x-auto">
+                    <div class="min-w-[760px]">
+                        <div class="grid grid-cols-[1.4fr_1.2fr_1fr_1fr_1fr_0.8fr] bg-muted/60 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                            <span>Session</span><span>Période</span><span>Fond</span><span>Attendu</span><span>Compté</span><span>Écart</span>
                         </div>
-                        <div class="grid grid-cols-3 gap-2 mt-4">
-                            <button v-for="r in ['Journal de caisse','Rapport marge','Bilan mensuel']" :key="r" class="border border-border rounded-md py-2.5 text-sm font-medium flex items-center justify-center gap-2"> {{ r }}</button>
+                        <div v-if="sessions.length === 0" class="px-4 py-8 text-center text-sm text-muted-foreground">
+                            Aucune session enregistrée.
+                        </div>
+                        <div
+                            v-for="s in sessions"
+                            :key="s.id"
+                            class="grid grid-cols-[1.4fr_1.2fr_1fr_1fr_1fr_0.8fr] items-center border-t border-border px-4 py-3 text-sm"
+                        >
+                            <span>
+                                <span class="font-medium">{{ s.user }}</span>
+                                <span class="block text-xs text-muted-foreground">
+                                    {{ s.status === 'open' ? 'Ouverte' : 'Clôturée' }}
+                                </span>
+                            </span>
+                            <span class="text-xs text-muted-foreground">{{ s.opened_at }} → {{ s.closed_at ?? '—' }}</span>
+                            <span>{{ s.opening }}</span>
+                            <span>{{ s.expected }}</span>
+                            <span>{{ s.closing }}</span>
+                            <span :class="s.ok ? 'text-accent' : 'text-danger'">{{ s.difference }}</span>
                         </div>
                     </div>
                 </div>

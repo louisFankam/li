@@ -2,46 +2,51 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreSupplierRequest;
 use App\Models\Supplier;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class SupplierController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Inertia::render('Suppliers', ['suppliers' => Supplier::orderBy('name')->get()]);
+        $this->authorize('manage_purchases');
+
+        return Inertia::render('Suppliers', [
+            'suppliers' => Supplier::withCount('purchases')->orderBy('name')->get(),
+        ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreSupplierRequest $request)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:120',
-            'contact' => 'nullable|string|max:120',
-            'phone' => 'nullable|string|max:40',
-            'email' => 'nullable|email|max:120',
-            'address' => 'nullable|string',
-        ]);
-        Supplier::create($data);
+        $supplier = Supplier::create($request->validated());
+
+        app(AuditLogger::class)->log('supplier.created', Supplier::class, $supplier->id, [], $supplier->toArray());
+
         return redirect()->back()->with('success', 'Fournisseur créé');
     }
 
-    public function update(Request $request, Supplier $supplier)
+    public function update(StoreSupplierRequest $request, Supplier $supplier)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:120',
-            'contact' => 'nullable|string|max:120',
-            'phone' => 'nullable|string|max:40',
-            'email' => 'nullable|email|max:120',
-            'address' => 'nullable|string',
-        ]);
-        $supplier->update($data);
+        $old = $supplier->toArray();
+        $supplier->update($request->validated());
+
+        app(AuditLogger::class)->log('supplier.updated', Supplier::class, $supplier->id, $old, $supplier->fresh()?->toArray() ?? []);
+
         return redirect()->back()->with('success', 'Fournisseur mis à jour');
     }
 
     public function destroy(Supplier $supplier)
     {
+        $this->authorize('manage_purchases');
+
+        $old = $supplier->toArray();
         $supplier->delete();
+
+        app(AuditLogger::class)->log('supplier.deleted', Supplier::class, $supplier->id, $old, []);
+
         return redirect()->back()->with('success', 'Fournisseur supprimé');
     }
 }

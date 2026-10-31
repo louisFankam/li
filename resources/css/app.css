@@ -98,3 +98,32 @@ html {
         font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
     }
 }
+
+/* Impression des tickets : on masque la navigation et les actions. */
+@media print {
+    body {
+        background: #fff !important;
+    }
+
+    .no-print,
+    aside,
+    nav {
+        display: none !important;
+    }
+
+    main {
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .print-area {
+        border: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        max-width: 80mm;
+        margin: 0 auto;
+        color: #000;
+    }
+}

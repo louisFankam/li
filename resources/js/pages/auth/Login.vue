@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { defineAsyncComponent } from 'vue';
-const ThreeHealthBackground = defineAsyncComponent(() => import('@/components/ThreeHealthBackground.vue'));
 import { Head, useForm } from '@inertiajs/vue3';
 import { gsap } from 'gsap';
 import { LoaderCircle } from 'lucide-vue-next';
@@ -46,20 +44,18 @@ onMounted(() => {
     <Head title="Connexion" />
 
     <div class="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-emerald-50">
-        <ThreeHealthBackground />
+        <div v-if="status" class="mb-4 text-center text-sm font-medium text-emerald-600">
+            {{ status }}
+        </div>
 
         <div class="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
-            <div ref="cardRef" class="w-full max-w-md rounded-3xl border border-white/60 bg-white/70 p-8 shadow-2xl backdrop-blur-xl">
+            <div class="w-full max-w-md rounded-3xl border border-white/60 bg-white/70 p-8 shadow-2xl">
                 <div class="mb-6 text-center">
-                    <div ref="titleRef" class="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-1 text-sm font-medium text-emerald-700">
+                    <div class="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-1 text-sm font-medium text-emerald-700">
                         PharmaGest Pro
                     </div>
                     <h1 class="font-headings text-2xl font-bold text-slate-800">Connexion sécurisée</h1>
                     <p class="mt-1 text-sm text-slate-500">Accédez à votre officine et à votre réseau</p>
-                </div>
-
-                <div v-if="status" class="mb-4 text-center text-sm font-medium text-emerald-600">
-                    {{ status }}
                 </div>
 
                 <form @submit.prevent="submit" class="flex flex-col gap-5">

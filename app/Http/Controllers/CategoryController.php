@@ -2,34 +2,51 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreCategoryRequest;
 use App\Models\Category;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class CategoryController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Inertia::render('Categories', ['categories' => Category::orderBy('name')->get()]);
+        $this->authorize('manage_stock');
+
+        return Inertia::render('Categories', [
+            'categories' => Category::withCount('products')->orderBy('name')->get(),
+        ]);
     }
 
-    public function store(Request $request)
+    public function store(StoreCategoryRequest $request)
     {
-        $data = $request->validate(['name' => 'required|string|max:120|unique:categories,name']);
-        Category::create($data);
+        $category = Category::create($request->validated());
+
+        app(AuditLogger::class)->log('category.created', Category::class, $category->id, [], $category->toArray());
+
         return redirect()->back()->with('success', 'Catégorie créée');
     }
 
-    public function update(Request $request, Category $category)
+    public function update(StoreCategoryRequest $request, Category $category)
     {
-        $data = $request->validate(['name' => 'required|string|max:120|unique:categories,name,' . $category->id]);
-        $category->update($data);
+        $old = $category->toArray();
+        $category->update($request->validated());
+
+        app(AuditLogger::class)->log('category.updated', Category::class, $category->id, $old, $category->fresh()?->toArray() ?? []);
+
         return redirect()->back()->with('success', 'Catégorie mise à jour');
     }
 
     public function destroy(Category $category)
     {
+        $this->authorize('manage_stock');
+
+        $old = $category->toArray();
         $category->delete();
+
+        app(AuditLogger::class)->log('category.deleted', Category::class, $category->id, $old, []);
+
         return redirect()->back()->with('success', 'Catégorie supprimée');
     }
 }

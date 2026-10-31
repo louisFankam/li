@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Tableau de bord', href: '/dashboard' }];
 
-defineProps<{
-    stats: { ca: string; tickets: string; lowStock: string; pendingInsurance: string };
+const props = defineProps<{
+    stats: { ca: string; tickets: string; lowStock: string; pendingInsurance: string; caDelta: number | null; ticketsDelta: number | null; claimsCount: number; cashOpen: boolean };
     pharmacies: { id: number; name: string; ville: string; ca: string; tickets: number; panier: string; progress: number; badge: string | null }[];
     lowStock: { name: string; pharma: string; stock: number; seuil: number; dot: string }[];
     lastSales: { id: string; heure: string; client: string; items: number; total: string; mode: string; status: string }[];
+    chart: { label: string; date: string; total: number }[];
 }>();
+
+const maxChart = computed(() => Math.max(1, ...props.chart.map((c) => c.total)));
+
+const ticketsDeltaLabel = computed(() => {
+    if (props.stats.ticketsDelta === null) return '—';
+    const delta = props.stats.ticketsDelta;
+    return `${delta >= 0 ? '+' : ''}${delta} % vs hier`;
+});
 </script>
 
 <template>
@@ -21,22 +31,22 @@ defineProps<{
                 <div class="flex-1 bg-card border border-border rounded-lg p-5">
                     <div class="text-xs text-muted-foreground font-medium">Chiffre d'affaires du jour</div>
                     <div class="font-headings font-bold text-2xl mt-1">{{ stats.ca }}</div>
-                    <div class="text-xs text-accent font-medium mt-1">+12,4 % vs hier</div>
+                    <div class="text-xs text-muted-foreground font-medium mt-1">{{ stats.caDelta !== null ? (stats.caDelta >= 0 ? '+' : '') + stats.caDelta + ' % vs hier' : '—' }}</div>
                 </div>
                 <div class="flex-1 bg-card border border-border rounded-lg p-5">
                     <div class="text-xs text-muted-foreground font-medium">Tickets encaissés</div>
                     <div class="font-headings font-bold text-2xl mt-1">{{ stats.tickets }}</div>
-                    <div class="text-xs text-accent font-medium mt-1">+8,1 % vs hier</div>
+                    <div class="text-xs text-muted-foreground font-medium mt-1">{{ ticketsDeltaLabel }}</div>
                 </div>
                 <div class="flex-1 bg-card border border-border rounded-lg p-5">
                     <div class="text-xs text-muted-foreground font-medium">Alertes stock faible</div>
                     <div class="font-headings font-bold text-2xl mt-1">{{ stats.lowStock }}</div>
-                    <div class="text-xs text-gold font-medium mt-1">-5 résolues</div>
+                    <div class="text-xs text-gold font-medium mt-1">Seuil atteint ou rupture</div>
                 </div>
                 <div class="flex-1 bg-card border border-border rounded-lg p-5">
                     <div class="text-xs text-muted-foreground font-medium">Remboursements en attente</div>
                     <div class="font-headings font-bold text-2xl mt-1">{{ stats.pendingInsurance }}</div>
-                    <div class="text-xs text-gold font-medium mt-1">14 dossiers</div>
+                    <div class="text-xs text-gold font-medium mt-1">{{ stats.claimsCount }} dossier(s) · caisse {{ stats.cashOpen ? 'ouverte' : 'fermée' }}</div>
                 </div>
             </div>
 
@@ -45,28 +55,32 @@ defineProps<{
                     <div class="font-headings font-bold text-lg">Ventes — 7 derniers jours</div>
                     <div class="text-sm text-muted-foreground">Vue consolidée</div>
                     <div class="mt-6 h-48 flex items-end gap-2">
-                        <div v-for="i in 7" :key="i" class="flex-1 bg-primary/70 rounded-t" :style="{ height: (30 + i * 9) + '%' }"></div>
+                        <div v-for="c in chart" :key="c.date" class="flex-1 flex flex-col items-center gap-1">
+                            <div class="w-full bg-primary/70 rounded-t" :style="{ height: maxChart ? (c.total / maxChart) * 100 + '%' : '4%' }" />
+                            <span class="text-[10px] text-muted-foreground">{{ c.label }}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="bg-card border border-border rounded-lg p-6 flex flex-col">
                     <div class="flex items-center justify-between">
                         <div class="font-headings font-bold text-lg">Stocks faibles</div>
-                        <a class="text-sm font-medium text-primary">Voir tout</a>
+                        <Link href="/stocks" class="text-sm font-medium text-primary hover:underline">Voir tout</Link>
                     </div>
                     <div class="text-sm text-muted-foreground">Blocage auto des ventes à 0</div>
                     <div class="flex flex-col gap-3 mt-4 flex-1">
-                        <div v-for="p in lowStock" :key="p.name" class="flex items-center gap-3 border border-border rounded-md px-3 py-2.5">
+                        <div v-if="lowStock.length === 0" class="text-sm text-muted-foreground">Aucun produit sous le seuil.</div>
+                        <div v-for="p in lowStock" :key="p.name + p.pharma" class="flex items-center gap-3 border border-border rounded-md px-3 py-2.5">
                             <span :class="['w-2 h-2 rounded-full', p.dot]" />
                             <div class="flex-1 min-w-0">
                                 <div class="text-sm font-medium truncate">{{ p.name }}</div>
                                 <div class="text-xs text-muted-foreground">{{ p.pharma }} · Reste {{ p.stock }} / seuil {{ p.seuil }}</div>
                             </div>
-                            <button class="text-xs font-medium border border-border rounded-sm px-2 py-1.5">Réassort</button>
+                            <Link href="/achats" class="text-xs font-medium border border-border rounded-sm px-2 py-1.5 hover:bg-muted">Réassort</Link>
                         </div>
                     </div>
-                    <button class="mt-4 w-full bg-dark text-white text-sm font-medium rounded-md py-2.5 flex items-center justify-center gap-2">
+                    <Link href="/achats" class="mt-4 w-full bg-dark text-white text-sm font-medium rounded-md py-2.5 flex items-center justify-center gap-2 hover:bg-dark/90">
                         Commander aux fournisseurs
-                    </button>
+                    </Link>
                 </div>
             </div>
 

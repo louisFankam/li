@@ -3,26 +3,36 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Pharmacy;
+use App\Services\PharmacyContext;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 trait UsesActivePharmacy
 {
+    protected function context(): PharmacyContext
+    {
+        return app(PharmacyContext::class);
+    }
+
     /**
      * Pharmacie active : celle choisie dans la Topbar (session), sinon la
-     * première pharmacie rattachée à l'utilisateur, sinon la première créée.
+     * première pharmacie accessible. Abandonne si l'utilisateur n'a aucun site.
      */
     protected function pharmacy(Request $request): Pharmacy
     {
-        $user = $request->user();
-        $activeId = $request->session()->get('active_pharmacy_id');
+        return $this->context()->requireActive($request);
+    }
 
-        if ($activeId && $user) {
-            $active = $user->pharmacies()->where('pharmacies.id', $activeId)->first();
-            if ($active) {
-                return $active;
-            }
-        }
+    /**
+     * Vérifie qu'un modèle appartient à une pharmacie accessible (404 sinon).
+     */
+    protected function guardPharmacy(Model $model, string $column = 'pharmacy_id'): void
+    {
+        $this->context()->guard($model, $column);
+    }
 
-        return $user?->pharmacies()->first() ?? Pharmacy::query()->orderBy('id')->firstOrFail();
+    protected function guardAnyPharmacy(Model $model, array $columns): void
+    {
+        $this->context()->guardAny($model, $columns);
     }
 }
