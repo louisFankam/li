@@ -158,7 +158,7 @@ class SaleService
                 'discount_reason' => $data['discount_reason'] ?? null,
                 'discount_approved_by' => $discountApprovedBy,
                 'total' => $total,
-            ]);
+            ], actor: $user, pharmacy: $pharmacy);
 
             return $sale;
         });
@@ -208,7 +208,7 @@ class SaleService
                 'status' => 'cancelled',
                 'reason' => $reason,
                 'cancelled_by' => $user->id,
-            ]);
+            ], actor: $user, pharmacy: $sale->pharmacy_id);
 
             return $sale;
         });
@@ -267,9 +267,11 @@ class SaleService
         }
 
         $absoluteMax = (int) config('discounts.absolute_max_percent', 50);
-        if (($percent ?? 0) > $absoluteMax) {
+        $absoluteMaxAmount = (int) floor($subtotal * $absoluteMax / 100);
+
+        if (($percent ?? 0) > $absoluteMax || $amount > $absoluteMaxAmount) {
             throw ValidationException::withMessages([
-                'discount' => "La remise ne peut pas dépasser {$absoluteMax} %.",
+                'discount' => "La remise ne peut pas dépasser {$absoluteMax} % du panier.",
             ]);
         }
 
@@ -396,6 +398,13 @@ class SaleService
 
             $insurerPart += max(0, min($lineInsurer, $line['line_total']));
         }
+
+        // La remise globale est partagée proportionnellement entre le client
+        // et l'assureur. Sans cela, l'assureur paierait le panier non remisé.
+        $subtotal = array_sum(array_column($lines, 'line_total'));
+        $insurerPart = $subtotal > 0
+            ? (int) round($insurerPart * $total / $subtotal)
+            : 0;
 
         $insurerPart = max(0, min($insurerPart, $total));
 

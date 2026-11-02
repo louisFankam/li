@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $resolved_by
  * @property Carbon|null $resolved_at
  * @property-read SyncEvent $syncEvent
+ * @property-read Pharmacy|null $pharmacy
  */
 class SyncConflict extends Model
 {

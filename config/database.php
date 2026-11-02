@@ -1,6 +1,13 @@
 <?php
 
 use Illuminate\Support\Str;
+use Pdo\Mysql;
+
+// PHP 8.4+ exposes the non-deprecated Pdo\Mysql constants. Kept as a
+// conditional so the application stays compatible with PHP 8.2/8.3.
+$mysqlSslCaAttribute = class_exists(Mysql::class)
+    ? Mysql::ATTR_SSL_CA
+    : PDO::MYSQL_ATTR_SSL_CA;
 
 return [
 
@@ -58,7 +65,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                $mysqlSslCaAttribute => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -78,7 +85,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                $mysqlSslCaAttribute => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 

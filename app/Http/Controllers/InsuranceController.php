@@ -8,6 +8,7 @@ use App\Models\InsuranceClaim;
 use App\Models\InsuranceCompany;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -139,40 +140,44 @@ class InsuranceController extends Controller
         $this->authorize('update', $claim);
         $data = $request->validated();
 
-        $allowed = self::TRANSITIONS[$claim->status] ?? [];
-        if (! in_array($data['status'], $allowed, true)) {
-            throw ValidationException::withMessages([
-                'status' => "Transition invalide depuis le statut « {$this->statusLabel($claim->status)} ».",
-            ]);
-        }
+        DB::transaction(function () use ($claim, $data) {
+            $claim = InsuranceClaim::query()->whereKey($claim->id)->lockForUpdate()->firstOrFail();
 
-        $update = [
-            'status' => $data['status'],
-            'reference' => $data['reference'] ?? $claim->reference,
-            'notes' => $data['notes'] ?? $claim->notes,
-        ];
-
-        if ($data['status'] === 'rembourse') {
-            $reimbursed = (int) ($data['reimbursed_amount'] ?? $claim->insurer_part);
-
-            if ($reimbursed > $claim->insurer_part) {
+            $allowed = self::TRANSITIONS[$claim->status] ?? [];
+            if (! in_array($data['status'], $allowed, true)) {
                 throw ValidationException::withMessages([
-                    'reimbursed_amount' => 'Le montant remboursé ne peut pas dépasser la part assureur ('.number_format($claim->insurer_part, 0, ',', ' ').' GNF).',
+                    'status' => "Transition invalide depuis le statut « {$this->statusLabel($claim->status)} ».",
                 ]);
             }
 
-            $update['reimbursed_amount'] = $reimbursed;
-            $update['reimbursed_at'] = now();
-        }
+            $update = [
+                'status' => $data['status'],
+                'reference' => $data['reference'] ?? $claim->reference,
+                'notes' => $data['notes'] ?? $claim->notes,
+            ];
 
-        $old = $claim->only(['status', 'reimbursed_amount']);
-        $claim->update($update);
+            if ($data['status'] === 'rembourse') {
+                $reimbursed = (int) ($data['reimbursed_amount'] ?? $claim->insurer_part);
 
-        app(AuditLogger::class)->log('insurance.status', InsuranceClaim::class, $claim->id, $old, [
-            'status' => $claim->status,
-            'reimbursed_amount' => $claim->reimbursed_amount,
-            'reference' => $claim->reference,
-        ]);
+                if ($reimbursed > $claim->insurer_part) {
+                    throw ValidationException::withMessages([
+                        'reimbursed_amount' => 'Le montant remboursé ne peut pas dépasser la part assureur ('.number_format($claim->insurer_part, 0, ',', ' ').' GNF).',
+                    ]);
+                }
+
+                $update['reimbursed_amount'] = $reimbursed;
+                $update['reimbursed_at'] = now();
+            }
+
+            $old = $claim->only(['status', 'reimbursed_amount']);
+            $claim->update($update);
+
+            app(AuditLogger::class)->log('insurance.status', InsuranceClaim::class, $claim->id, $old, [
+                'status' => $claim->status,
+                'reimbursed_amount' => $claim->reimbursed_amount,
+                'reference' => $claim->reference,
+            ]);
+        });
 
         return redirect()->back()->with('success', 'Dossier mis à jour');
     }

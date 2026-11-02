@@ -40,7 +40,7 @@ const nav: NavEntry[] = [
     { section: 'Exploitation' },
     { label: 'Produits & Stocks', icon: Package, href: '/stocks', permission: 'manage_stock' },
     { label: 'Catégories', icon: Tags, href: '/categories', permission: 'manage_products' },
-    { label: 'Clients', icon: Users, href: '/customers' },
+    { label: 'Clients', icon: Users, href: '/customers', permission: 'make_sales' },
     { label: 'Fournisseurs', icon: Truck, href: '/suppliers', permission: 'manage_purchases' },
     { label: 'Achats', icon: Truck, href: '/achats', permission: 'manage_purchases' },
     { label: 'Transferts', icon: ArrowLeftRight, href: '/transfers', permission: 'manage_transfers' },
@@ -54,7 +54,7 @@ const nav: NavEntry[] = [
     { label: 'Utilisateurs', icon: Users, href: '/users', permission: 'manage_users' },
     { label: 'Administration', icon: Building2, href: '/administration', permission: 'manage_pharmacies' },
     { label: 'Audit', icon: BookOpen, href: '/audit', permission: 'manage_audit' },
-    { label: 'Conflits sync', icon: AlertTriangle, href: '/sync/conflicts' },
+    { label: 'Conflits sync', icon: AlertTriangle, href: '/sync/conflicts', permission: 'manage_audit' },
 ];
 
 const page = usePage();
@@ -63,9 +63,7 @@ const permissions = computed<string[]>(() => (page.props as any).auth?.permissio
 const pharmacies = computed<any[]>(() => (page.props as any).pharmacies ?? []);
 const activePharmacyId = computed(() => (page.props as any).activePharmacyId ?? null);
 
-const activePharmacy = computed(
-    () => pharmacies.value.find((p) => p.id === activePharmacyId.value) ?? null,
-);
+const activePharmacy = computed(() => pharmacies.value.find((p) => p.id === activePharmacyId.value) ?? null);
 
 const isSuperAdmin = computed(() => Boolean(auth.value?.is_super_admin));
 
@@ -75,9 +73,7 @@ function can(permission?: string): boolean {
     return permissions.value.includes(permission);
 }
 
-const visibleNav = computed<NavEntry[]>(() =>
-    nav.filter((item) => !('permission' in item) || can(item.permission)),
-);
+const visibleNav = computed<NavEntry[]>(() => nav.filter((item) => !('permission' in item) || can(item.permission)));
 
 const userInitials = computed(() => {
     const name = auth.value?.name ?? '';
@@ -162,21 +158,14 @@ watch(
 
         <nav class="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-4">
             <template v-for="(item, idx) in visibleNav" :key="idx">
-                <div
-                    v-if="'section' in item"
-                    class="px-3 pb-1.5 pt-4 text-xs font-medium uppercase tracking-wider opacity-50"
-                >
+                <div v-if="'section' in item" class="px-3 pb-1.5 pt-4 text-xs font-medium uppercase tracking-wider opacity-50">
                     {{ item.section }}
                 </div>
                 <Link
                     v-else
                     :href="item.href"
                     class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-                    :class="
-                        isActive(item.href)
-                            ? 'bg-primary text-white'
-                            : 'text-dark-foreground/80 hover:bg-white/5 hover:text-white'
-                    "
+                    :class="isActive(item.href) ? 'bg-primary text-white' : 'text-dark-foreground/80 hover:bg-white/5 hover:text-white'"
                 >
                     <component :is="item.icon" class="h-[18px] w-[18px] shrink-0" />
                     <span class="flex-1">{{ item.label }}</span>
@@ -197,9 +186,7 @@ watch(
                     <span class="h-2.5 w-2.5 rounded-full" :class="isOnline ? 'bg-primary' : 'bg-danger'" />
                     <span class="text-sm font-medium text-white">{{ isOnline ? 'En ligne' : 'Hors ligne' }}</span>
                 </div>
-                <div class="mt-1.5 text-xs leading-relaxed opacity-60">
-                    {{ pending }} opération(s) en attente de synchronisation.
-                </div>
+                <div class="mt-1.5 text-xs leading-relaxed opacity-60">{{ pending }} opération(s) en attente de synchronisation.</div>
             </div>
             <div class="mt-4 flex items-center gap-2.5 px-1">
                 <div class="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">

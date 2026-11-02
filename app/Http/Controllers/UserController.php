@@ -7,39 +7,71 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Models\Pharmacy;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\PharmacyContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class UserController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, PharmacyContext $context)
     {
-        $this->authorize('manage_users');
+        $this->authorize('viewAny', User::class);
 
-        $users = User::with('pharmacies')->orderBy('name')->get()->map(fn ($u) => [
-            'id' => $u->id,
-            'name' => $u->name,
-            'email' => $u->email,
-            'is_super_admin' => $u->is_super_admin,
-            'pharmacies' => $u->pharmacies->map(fn ($p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'role' => $p->pivot->role,
-            ])->values(),
+        $actor = $request->user();
+        $managedPharmacies = Pharmacy::query()
+            ->whereIn('id', $context->accessibleIds($request))
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (Pharmacy $pharmacy) => $actor->hasPermission('manage_users', $pharmacy))
+            ->values();
+
+        $managedIds = $managedPharmacies->pluck('id')->all();
+
+        $users = User::with(['pharmacies' => fn ($query) => $query->whereIn('pharmacies.id', $managedIds)])
+            ->orderBy('name')
+            ->get()
+            ->filter(fn (User $user) => $actor->is_super_admin || $actor->canManageUser($user))
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_super_admin' => $user->is_super_admin,
+                'can_update' => $actor->can('update', $user),
+                'can_delete' => $actor->can('delete', $user),
+                'pharmacies' => $user->pharmacies->map(fn ($pharmacy) => [
+                    'id' => $pharmacy->id,
+                    'name' => $pharmacy->name,
+                    'role' => $pharmacy->pivot->role,
+                ])->values(),
+            ])->values();
+
+        $rolesByPharmacy = $managedPharmacies->mapWithKeys(fn (Pharmacy $pharmacy) => [
+            (string) $pharmacy->id => collect(User::ROLES)
+                ->filter(fn (string $role) => $actor->canAssignRole($role, $pharmacy))
+                ->values()
+                ->all(),
         ]);
 
         return Inertia::render('Users', [
             'users' => $users,
-            'pharmacies' => Pharmacy::orderBy('name')->get(),
-            'roles' => User::ROLES,
+            'pharmacies' => $managedPharmacies->map(fn (Pharmacy $pharmacy) => [
+                'id' => $pharmacy->id,
+                'name' => $pharmacy->name,
+            ])->values(),
+            'roles' => $rolesByPharmacy->flatten()->unique()->values()->all(),
+            'roles_by_pharmacy' => $rolesByPharmacy,
         ]);
     }
 
     public function store(StoreUserRequest $request)
     {
+        $this->authorize('create', User::class);
+
         $data = $request->validated();
+        $this->assertAssignmentsAllowed($request->user(), $data['pharmacies']);
 
         $user = DB::transaction(function () use ($data) {
             $user = User::create([
@@ -72,6 +104,7 @@ class UserController extends Controller
         $this->authorize('update', $user);
 
         $data = $request->validated();
+        $this->assertAssignmentsAllowed($request->user(), $data['pharmacies']);
         $old = $user->toArray();
 
         DB::transaction(function () use ($user, $data) {
@@ -105,5 +138,23 @@ class UserController extends Controller
         app(AuditLogger::class)->log('user.deleted', User::class, $user->id, $old, []);
 
         return redirect()->back()->with('success', 'Utilisateur supprimé');
+    }
+
+    /**
+     * @param  array<int, array{id: int, role: string}>  $assignments
+     */
+    private function assertAssignmentsAllowed(User $actor, array $assignments): void
+    {
+        foreach ($assignments as $index => $assignment) {
+            $pharmacy = Pharmacy::query()->find($assignment['id']);
+
+            if ($pharmacy === null
+                || ! $actor->canAccessPharmacy($pharmacy)
+                || ! $actor->canAssignRole($assignment['role'], $pharmacy)) {
+                throw ValidationException::withMessages([
+                    "pharmacies.{$index}.role" => 'Vous ne pouvez pas attribuer ce rôle sur cette pharmacie.',
+                ]);
+            }
+        }
     }
 }

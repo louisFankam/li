@@ -1,5 +1,5 @@
-import { db, type OutboxEvent } from './db';
 import { route } from 'ziggy-js';
+import { db, type OutboxEvent } from './db';
 
 const DEVICE_TOKEN_KEY = 'pharmagest.device_token';
 let syncTimer: ReturnType<typeof setInterval> | null = null;
@@ -146,7 +146,7 @@ export async function pullSnapshot(): Promise<void> {
     if (!res.ok) return;
 
     const data = await res.json();
-    await db.transaction('rw', db.products, db.customers, db.insurers, db.insurance_rules, db.stock_levels, db.meta, async () => {
+    await db.transaction('rw', [db.products, db.customers, db.insurers, db.insurance_rules, db.stock_levels, db.meta], async () => {
         if (data.changes?.products) await db.products.bulkPut(data.changes.products);
         if (data.changes?.customers) await db.customers.bulkPut(data.changes.customers);
         if (data.changes?.insurers) await db.insurers.bulkPut(data.changes.insurers);

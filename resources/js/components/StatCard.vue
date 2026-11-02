@@ -32,10 +32,7 @@ const max = computed(() => Math.max(...props.spark, 1));
             </div>
             <span
                 v-if="delta"
-                :class="[
-                    'rounded-sm px-2 py-1 text-xs font-medium',
-                    positive ? 'bg-success-soft text-accent' : 'bg-danger-soft text-danger',
-                ]"
+                :class="['rounded-sm px-2 py-1 text-xs font-medium', positive ? 'bg-success-soft text-accent' : 'bg-danger-soft text-danger']"
             >
                 {{ delta }}
             </span>
@@ -46,10 +43,7 @@ const max = computed(() => Math.max(...props.spark, 1));
             <div
                 v-for="(v, i) in spark"
                 :key="i"
-                :class="[
-                    'flex-1 rounded-sm',
-                    i === spark.length - 1 ? 'bg-primary' : positive ? 'bg-secondary' : 'bg-muted',
-                ]"
+                :class="['flex-1 rounded-sm', i === spark.length - 1 ? 'bg-primary' : positive ? 'bg-secondary' : 'bg-muted']"
                 :style="{ height: (v / max) * 100 + '%' }"
             />
         </div>

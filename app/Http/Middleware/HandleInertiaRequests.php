@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Pharmacy;
 use App\Support\Permissions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -40,9 +41,11 @@ class HandleInertiaRequests extends Middleware
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
         $user = $request->user();
-        $pharmacies = $user
-            ? $user->pharmacies()->orderBy('name')->get(['pharmacies.id', 'name', 'city'])
-            : collect();
+        $pharmacies = $user?->is_super_admin
+            ? Pharmacy::query()->orderBy('name')->get(['id', 'name', 'city'])
+            : ($user
+                ? $user->pharmacies()->orderBy('name')->get(['pharmacies.id', 'name', 'city'])
+                : collect());
 
         // La pharmacie active est résolue par le contexte (session + fallback
         // sur la première pharmacie accessible), afin que la Topbar et la

@@ -23,7 +23,7 @@ class StoreUserRequest extends FormRequest
             'email' => ['required', 'email', 'max:190', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'pharmacies' => ['required', 'array', 'min:1'],
-            'pharmacies.*.id' => ['required', 'integer', 'exists:pharmacies,id'],
+            'pharmacies.*.id' => ['required', 'integer', 'distinct', 'exists:pharmacies,id'],
             'pharmacies.*.role' => ['required', 'string', Rule::in(User::ROLES)],
         ];
     }

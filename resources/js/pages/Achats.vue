@@ -59,9 +59,7 @@ const form = useForm({
     items: [{ product_id: null as number | null, quantity: 1, unit_price: 0 }],
 });
 
-const formTotal = computed(() =>
-    form.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0),
-);
+const formTotal = computed(() => form.items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0));
 
 function addItem() {
     form.items.push({ product_id: null, quantity: 1, unit_price: 0 });
@@ -153,11 +151,7 @@ function canReceive(purchase: Purchase): boolean {
                     <div class="grid gap-3 md:grid-cols-2">
                         <div class="flex flex-col gap-1">
                             <label for="supplier" class="text-xs font-medium text-muted-foreground">Fournisseur</label>
-                            <select
-                                id="supplier"
-                                v-model="form.supplier_id"
-                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
-                            >
+                            <select id="supplier" v-model="form.supplier_id" class="rounded-md border border-border bg-input px-3 py-2 text-sm">
                                 <option :value="null">Sélectionner…</option>
                                 <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
                             </select>
@@ -178,11 +172,7 @@ function canReceive(purchase: Purchase): boolean {
                         <div class="hidden grid-cols-[2fr_100px_140px_40px] gap-2 text-xs font-medium text-muted-foreground md:grid">
                             <span>Produit</span><span>Quantité</span><span>Prix d'achat</span><span></span>
                         </div>
-                        <div
-                            v-for="(it, i) in form.items"
-                            :key="i"
-                            class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_100px_140px_40px]"
-                        >
+                        <div v-for="(it, i) in form.items" :key="i" class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_100px_140px_40px]">
                             <select
                                 v-model="it.product_id"
                                 class="rounded-md border border-border bg-input px-3 py-2 text-sm"
@@ -219,15 +209,13 @@ function canReceive(purchase: Purchase): boolean {
                     </div>
 
                     <div class="flex flex-wrap items-center justify-between gap-3">
-                        <button
-                            type="button"
-                            class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-                            @click="addItem"
-                        >
+                        <button type="button" class="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm" @click="addItem">
                             <Plus class="h-4 w-4" /> Ajouter une ligne
                         </button>
                         <div class="flex items-center gap-4">
-                            <span class="text-sm text-muted-foreground">Total : <strong class="text-foreground">{{ money(formTotal) }}</strong></span>
+                            <span class="text-sm text-muted-foreground"
+                                >Total : <strong class="text-foreground">{{ money(formTotal) }}</strong></span
+                            >
                             <button
                                 type="submit"
                                 class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -243,9 +231,7 @@ function canReceive(purchase: Purchase): boolean {
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="p-5 font-headings text-lg font-bold">Commandes</div>
 
-                <div v-if="purchases.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucune commande enregistrée.
-                </div>
+                <div v-if="purchases.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">Aucune commande enregistrée.</div>
 
                 <div v-for="p in purchases" :key="p.id" class="border-t border-border p-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -291,9 +277,7 @@ function canReceive(purchase: Purchase): boolean {
                     </div>
 
                     <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span v-for="it in p.items" :key="it.id">
-                            {{ it.product }} : {{ it.received }}/{{ it.ordered }}
-                        </span>
+                        <span v-for="it in p.items" :key="it.id"> {{ it.product }} : {{ it.received }}/{{ it.ordered }} </span>
                     </div>
 
                     <div v-if="receivingId === p.id" class="mt-3 rounded-md border border-border bg-muted/30 p-3">
@@ -316,14 +300,8 @@ function canReceive(purchase: Purchase): boolean {
                             />
                         </div>
                         <div class="mt-3 flex justify-end gap-2">
-                            <button type="button" class="rounded-md border border-border px-3 py-1.5 text-sm" @click="closeReceive">
-                                Annuler
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white"
-                                @click="submitReceive(p)"
-                            >
+                            <button type="button" class="rounded-md border border-border px-3 py-1.5 text-sm" @click="closeReceive">Annuler</button>
+                            <button type="button" class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white" @click="submitReceive(p)">
                                 Valider la réception
                             </button>
                         </div>

@@ -11,7 +11,10 @@ use App\Models\StockLevel;
 use App\Models\User;
 use App\Observers\VersionObserver;
 use App\Support\Permissions;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -45,5 +48,14 @@ class AppServiceProvider extends ServiceProvider
         foreach ([Product::class, Customer::class, InsuranceCompany::class, InsuranceRule::class, StockLevel::class] as $model) {
             $model::observe(VersionObserver::class);
         }
+
+        RateLimiter::for('sync', function (Request $request) {
+            $token = (string) ($request->input('device_token') ?? $request->query('device_token', ''));
+            $key = $token !== ''
+                ? 'device:'.hash('sha256', $token)
+                : 'ip:'.$request->ip();
+
+            return Limit::perMinute(120)->by($key);
+        });
     }
 }

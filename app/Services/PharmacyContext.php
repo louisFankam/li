@@ -24,9 +24,7 @@ class PharmacyContext
     {
         $user ??= $this->user();
 
-        return $user !== null
-            && $user->pharmacies()->count() === 0
-            && $user->email === 'admin@pharmagest.test';
+        return $user?->is_super_admin === true;
     }
 
     /**

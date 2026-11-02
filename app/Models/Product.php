@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,6 +30,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Product extends Model
 {
+    use HasFactory;
+
     protected $fillable = ['code', 'barcode', 'name', 'generic_name', 'dosage', 'form', 'laboratory', 'category_id', 'base_unit', 'sale_unit', 'conversion_factor', 'purchase_price', 'sale_price', 'alert_threshold', 'is_active', 'notes', 'version'];
 
     protected $casts = ['is_active' => 'boolean', 'purchase_price' => 'integer', 'sale_price' => 'integer', 'alert_threshold' => 'integer', 'conversion_factor' => 'integer'];

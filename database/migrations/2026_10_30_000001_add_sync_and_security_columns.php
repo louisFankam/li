@@ -72,13 +72,26 @@ return new class extends Migration
         Schema::dropIfExists('devices');
 
         foreach (['products', 'customers', 'insurance_companies', 'insurance_rules', 'stock_levels'] as $tableName) {
+            // SQLite needs the index removed before its column, otherwise the
+            // table rebuild fails with "no such column: version".
+            Schema::table($tableName, function (Blueprint $table) {
+                $table->dropIndex(['version']);
+            });
+
             Schema::table($tableName, function (Blueprint $table) {
                 $table->dropColumn('version');
             });
         }
 
         Schema::table('sales', function (Blueprint $table) {
+            $table->dropUnique(['client_request_id']);
+        });
+
+        Schema::table('sales', function (Blueprint $table) {
             $table->dropConstrainedForeignId('cancelled_by');
+        });
+
+        Schema::table('sales', function (Blueprint $table) {
             $table->dropColumn(['client_request_id', 'cancelled_at', 'cancel_reason']);
         });
     }

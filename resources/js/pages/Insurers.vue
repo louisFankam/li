@@ -26,7 +26,7 @@ const form = useForm({
     contact: '',
     phone: '',
     email: '',
-    is_active: true,
+    is_active: true as boolean,
 });
 
 const editingId = ref<number | null>(null);
@@ -161,9 +161,7 @@ function disable(id: number) {
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="p-5 font-headings text-lg font-bold">Assureurs ({{ props.companies.length }})</div>
 
-                <div v-if="props.companies.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucun assureur enregistré.
-                </div>
+                <div v-if="props.companies.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">Aucun assureur enregistré.</div>
 
                 <div
                     v-for="c in props.companies"
@@ -181,8 +179,8 @@ function disable(id: number) {
                             </span>
                         </div>
                         <div class="text-xs text-muted-foreground">
-                            {{ c.code || 'Sans code' }} · {{ c.contact || 'Sans contact' }} · {{ c.phone || '—' }} ·
-                            {{ c.email || '—' }} · {{ c.customers_count ?? 0 }} client(s)
+                            {{ c.code || 'Sans code' }} · {{ c.contact || 'Sans contact' }} · {{ c.phone || '—' }} · {{ c.email || '—' }} ·
+                            {{ c.customers_count ?? 0 }} client(s)
                         </div>
                     </div>
                     <div class="flex items-center gap-2">

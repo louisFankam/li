@@ -164,8 +164,11 @@ class SaleController extends Controller
         if ($percent > 0) {
             $subtotal = 0;
             foreach ($data['items'] ?? [] as $item) {
-                $product = Product::find($item['product_id'] ?? null);
-                $subtotal += ($product?->sale_price ?? 0) * (int) ($item['quantity'] ?? 0);
+                $salePrice = Product::query()
+                    ->whereKey($item['product_id'] ?? null)
+                    ->value('sale_price');
+
+                $subtotal += (int) ($salePrice ?? 0) * (int) ($item['quantity'] ?? 0);
             }
             $amount = (int) round($subtotal * $percent / 100);
         }

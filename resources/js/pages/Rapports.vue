@@ -9,8 +9,8 @@ const props = defineProps<{
     filters: { from: string; to: string };
 }>();
 
-const from = (props.filters?.from) || '';
-const to = (props.filters?.to) || '';
+const from = props.filters?.from || '';
+const to = props.filters?.to || '';
 
 function apply() {
     const f = (document.getElementById('from') as HTMLInputElement).value;
@@ -28,23 +28,23 @@ function exportCsv() {
     <Head title="Rapports" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-5 p-8">
-            <div class="bg-card border border-border rounded-lg p-5 flex items-end gap-3">
+            <div class="flex items-end gap-3 rounded-lg border border-border bg-card p-5">
                 <div>
                     <label class="text-xs text-muted-foreground">Du</label>
-                    <input id="from" type="date" :value="from" class="border border-border rounded-md px-3 py-2 text-sm" />
+                    <input id="from" type="date" :value="from" class="rounded-md border border-border px-3 py-2 text-sm" />
                 </div>
                 <div>
                     <label class="text-xs text-muted-foreground">Au</label>
-                    <input id="to" type="date" :value="to" class="border border-border rounded-md px-3 py-2 text-sm" />
+                    <input id="to" type="date" :value="to" class="rounded-md border border-border px-3 py-2 text-sm" />
                 </div>
-                <button @click="apply" class="bg-primary text-white rounded-md px-4 py-2 text-sm">Filtrer</button>
-                <button @click="exportCsv" class="border border-border rounded-md px-4 py-2 text-sm">Exporter CSV</button>
+                <button @click="apply" class="rounded-md bg-primary px-4 py-2 text-sm text-white">Filtrer</button>
+                <button @click="exportCsv" class="rounded-md border border-border px-4 py-2 text-sm">Exporter CSV</button>
             </div>
-            <div class="bg-card border border-border rounded-lg overflow-hidden">
-                <div class="grid grid-cols-6 bg-muted/60 text-xs font-medium text-muted-foreground px-4 py-2.5">
+            <div class="overflow-hidden rounded-lg border border-border bg-card">
+                <div class="grid grid-cols-6 bg-muted/60 px-4 py-2.5 text-xs font-medium text-muted-foreground">
                     <span>N° vente</span><span>Date</span><span>Vendeur</span><span>Client</span><span>Total</span><span>Statut</span>
                 </div>
-                <div v-for="s in props.sales" :key="s.number" class="grid grid-cols-6 px-4 py-3 border-t border-border text-sm">
+                <div v-for="s in props.sales" :key="s.number" class="grid grid-cols-6 border-t border-border px-4 py-3 text-sm">
                     <span class="font-bold">{{ s.number }}</span>
                     <span>{{ s.date }}</span>
                     <span>{{ s.vendeur }}</span>
@@ -56,4 +56,3 @@ function exportCsv() {
         </div>
     </AppLayout>
 </template>
-

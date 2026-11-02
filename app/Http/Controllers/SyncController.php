@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Device;
 use App\Models\InsuranceCompany;
 use App\Models\InsuranceRule;
+use App\Models\Payment;
 use App\Models\Pharmacy;
 use App\Models\Product;
 use App\Models\Sale;
@@ -268,7 +269,7 @@ class SyncController extends Controller
             'pharmacy_id' => $pharmacyId,
             'opening_amount' => $session->opening_amount,
             'source' => 'sync',
-        ]);
+        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
     private function processCashClosed(SyncEvent $event, array $payload): void
@@ -300,7 +301,7 @@ class SyncController extends Controller
             'expected' => $expected,
             'closing' => $closing,
             'source' => 'sync',
-        ]);
+        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
     private function processCashMovement(SyncEvent $event, array $payload): void
@@ -340,7 +341,7 @@ class SyncController extends Controller
             'type' => $type,
             'amount' => $amount,
             'source' => 'sync',
-        ]);
+        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
     private function processStockAdjusted(SyncEvent $event, array $payload): void
@@ -374,7 +375,7 @@ class SyncController extends Controller
             'type' => $type,
             'delta' => $delta,
             'source' => 'sync',
-        ]);
+        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
     private function processInventoryCounted(SyncEvent $event, array $payload): void
@@ -406,7 +407,7 @@ class SyncController extends Controller
             'pharmacy_id' => $pharmacyId,
             'lines' => count($counts),
             'source' => 'sync',
-        ]);
+        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
     private function requirePharmacy(SyncEvent $event): int
@@ -418,7 +419,7 @@ class SyncController extends Controller
 
     private function expectedCash(CashSession $session): int
     {
-        $cashPayments = \App\Models\Payment::whereHas('sale', function ($q) use ($session) {
+        $cashPayments = Payment::whereHas('sale', function ($q) use ($session) {
             $q->where('pharmacy_id', $session->pharmacy_id)->where('status', 'completed');
         })
             ->whereIn('method', ['especes', 'espèces', 'espece', 'espèce', 'cash'])
@@ -462,7 +463,7 @@ class SyncController extends Controller
 
     public function conflicts(Request $request): Response
     {
-        $this->authorize('manage_audit');
+        $this->authorize('viewAny', SyncConflict::class);
         $accessible = app(PharmacyContext::class)->accessibleIds($request);
 
         /** @var Collection<int, SyncConflict> $rows */
@@ -488,7 +489,7 @@ class SyncController extends Controller
 
     public function resolveConflict(Request $request, SyncConflict $conflict): RedirectResponse
     {
-        $this->authorize('manage_audit');
+        $this->authorize('resolve', $conflict);
         $data = $request->validate(['resolution' => ['required', 'in:applied,cancelled,adjusted']]);
 
         $conflict->update([

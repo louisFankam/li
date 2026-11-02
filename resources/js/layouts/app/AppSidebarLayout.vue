@@ -21,7 +21,11 @@ withDefaults(defineProps<Props>(), {
     <AppShell variant="sidebar">
         <AppSidebar />
         <AppContent variant="sidebar">
-            <Topbar :title="breadcrumbs.length ? breadcrumbs[breadcrumbs.length - 1].title : 'Tableau de bord'" :subtitle="subtitle" :show-pharmacy-switch="showPharmacySwitch" />
+            <Topbar
+                :title="breadcrumbs.length ? breadcrumbs[breadcrumbs.length - 1].title : 'Tableau de bord'"
+                :subtitle="subtitle"
+                :show-pharmacy-switch="showPharmacySwitch"
+            />
             <slot />
         </AppContent>
     </AppShell>

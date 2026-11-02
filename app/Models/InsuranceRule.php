@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class InsuranceRule extends Model
 {
+    use HasFactory;
+
     protected $fillable = ['insurance_company_id', 'type', 'value', 'category_id', 'product_id', 'version'];
 
     protected $casts = ['value' => 'integer'];

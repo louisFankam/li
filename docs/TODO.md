@@ -72,19 +72,19 @@
 - [x] Gates appliqués dans Product, Sale, Purchase, Cash, Insurance, Inventory, Report, Audit controllers
 - [x] Middleware `pharmacy.scope` dédié (logique dans `UsesActivePharmacy`, à renforcer)
 - [x] Créer Policies par modèle (optionnel, gates suffisent pour l'instant)
-- [x] Vérification `pharmacy_id` à chaque requête (à renforcer)
+- [-] Vérification `pharmacy_id` à chaque requête : `PharmacyContext::guard()` existe mais n'est appelé par aucun contrôleur ; l'isolation repose sur les policies, désormais couvertes par des tests cross-pharmacie sur ventes, caisses, achats, assurances, transferts, conflits et utilisateurs
 
 ### 0.2 Permissions granulaires
 - [x] Choisir librairie (Spatie Permission ou tables custom `permissions`/`role_permissions`)
 - [x] Définir les permissions : consultation, création, modification, validation, annulation, export, multi-sites, paramètres
 - [x] Mapper les rôles CDC (admin client, responsable régional, gérant, pharmacien/délivrance, vendeur/caissier, gestionnaire stock, comptable/assurance) vers permissions
-- [ ] Appliquer les permissions dans routes/contrôleurs/UI (masquage des actions non autorisées)
-- [ ] Tests : accès cross-pharmacie refusé, permission manquante → 403
+- [-] Appliquer les permissions dans routes/contrôleurs/UI : serveur durci et testé sur les parcours critiques ; masquage UI limité aux actions Utilisateurs et aux liens de navigation
+- [x] Tests : accès cross-pharmacie refusé, permission manquante → 403 (`tests/Feature/Security`)
 
 ### 0.3 Utilisateurs multi-sites
 - [x] `UserController::store/update` acceptent plusieurs pharmacies avec rôle par site
 - [x] Frontend `Users.vue` envoie le format `pharmacies: [{id, role}]`
-- [-] UI multi-sélection avancée (actuellement création mono-site, extensible)
+- [x] UI multi-sélection (`Users.vue`), limitée aux pharmacies administrables par l'acteur
 
 ### 0.4 Audit log
 - [x] Service `AuditLogger` créé
@@ -94,9 +94,9 @@
 - [x] Page Audit (lecture)
 
 ### 0.5 Validation & qualité
-- [x] Form Requests pour chaque contrôleur
+- [-] Form Requests pour chaque contrôleur : présents sur les parcours métier principaux ; validations inline restantes dans `SyncController`, `PurchaseController` et `PharmacyController`
 - [x] Messages d'erreur en français
-- [x] Tests policies + smoke étendu
+- [x] Tests policies + smoke étendu : security tests cross-pharmacie, matrice de permissions, utilisateurs, conflits et audit
 
 **Sortie Phase 0** : droits testés, données isolées par site.
 
@@ -154,7 +154,7 @@
 ### 2.2 Remises
 - [x] Plafond par rôle (taux/montant max)
 - [x] Validation par gérant au-delà du plafond (aucun contournement silencieux)
-- [ ] Prix minimum : empêcher remise conduisant à prix nul/négatif; contrôle renforcé sous coût d'achat si fiable
+- [x] Prix minimum : remise plafonnée à 50 % du panier, vente à 0 GNF refusée ; contrôle sous coût d'achat non applicable sans marge fiable
 - [x] Motif obligatoire + trace (montants origine/remise, utilisateur, approbateur)
 
 ### 2.3 Annulation / avoir
@@ -162,8 +162,8 @@
 - [ ] Lien vers vente d'origine, motif, utilisateur, approbateur (à compléter)
 
 ### 2.4 Tickets
-- [ ] Génération ticket imprimable (identité pharmacie, n°, date, lignes, remises, totaux, règlements, mentions légales)
-- [ ] Réimpression
+- [-] Génération ticket imprimable (identité pharmacie, n°, date, lignes, remises, totaux, règlements, mentions légales) : ticket existant (`Ticket.vue`, auto-print `?print=1`) ; mentions légales manquantes
+- [x] Réimpression (route `vente.ticket` accessible pour toute vente)
 - [ ] Format réglementaire Guinée à confirmer
 
 ### 2.5 Paiements configurables
@@ -184,10 +184,10 @@
 - [x] Remplacer les valeurs statiques (dépenses/fond/résultat) par calculs réels
 
 ### 2.8 Tests
-- [ ] Vente avec stock suffisant diminue stock + enregistre paiements une seule fois
-- [ ] Vente > stock bloquée même avec concurrence (deux caissiers)
-- [ ] Remise > plafond nécessite validation + laisse trace
-- [ ] Annulation crée avoir + lien origine
+- [x] Vente avec stock suffisant diminue stock + enregistre paiements une seule fois (idempotence `client_request_id`)
+- [x] Vente > stock bloquée même avec concurrence (deux processus MySQL)
+- [x] Remise > plafond nécessite validation + laisse trace
+- [-] Annulation : restock, motif, acteur, claim annulé et double annulation bloquée testés ; création d'un avoir et lien d'origine toujours à faire
 
 **Sortie Phase 2** : scénarios de comptoir acceptés.
 
@@ -209,7 +209,7 @@
 - [ ] Exports des dossiers (CSV/PDF) (à faire)
 
 ### 3.4 Tests
-- [ ] Vente avec assurance calcule parts client/assureur et crée créance suivie jusqu'au règlement/rejet
+- [x] Vente avec assurance calcule parts client/assureur et crée créance suivie jusqu'au règlement/rejet
 
 **Sortie Phase 3** : rapprochement validé sur exemples réels.
 
@@ -243,7 +243,7 @@
 
 ### 5.2 File d'événements
 - [x] Table `sync_events` : idempotency key, origine site, type, payload, statut, tentatives
-- [x] Chaque transaction locale → événement persistant dans la file
+- [-] Chaque transaction locale → événement persistant dans la file : `enqueueEvent()` n'est appelé nulle part, `Vente.vue` envoie directement en ligne
 
 ### 5.3 Service de synchronisation
 - [x] Envoi automatique à la reconnexion
@@ -259,7 +259,7 @@
 - [x] Produits, prix, règles de remise, comptes versionnés et diffusés aux sites
 
 ### 5.6 UI de sync
-- [ ] Indicateur permanent en haut (Topbar) : état connexion/sync, nb opérations en attente, dernière sync réussie
+- [-] Indicateur permanent en haut (Topbar) : état connexion/sync, nb opérations en attente, dernière sync réussie (UI en place, mais compteur toujours à 0 tant que l'outbox n'est pas alimentée)
 - [ ] Rapports centraux : signaler sites non synchronisés
 - [ ] Transferts inter-sites non confirmés tant que sync complète
 
@@ -347,7 +347,7 @@
 - [x] Form Requests pour tous les contrôleurs.
 - [x] Policies par modèle.
 - [x] Rate limiting login + API sync ; en-têtes de sécurité.
-- [x] Tests cross-pharmacie (403) et prix falsifié.
+- [-] Tests cross-pharmacie (403) ajoutés ; test dédié de prix falsifié toujours absent.
 
 ### Design system (absent du TODO)
 - [ ] Figer les tokens (`app.css`, `tailwind.config.js`) et documenter.
@@ -357,17 +357,17 @@
 - [ ] Responsive + accessibilité + impression ticket.
 
 ### Offline (préciser la Phase 5)
-- [x] PWA : manifest + service worker (Workbox) + fallback hors ligne.
+- [-] PWA : manifest + service worker (Workbox) + fallback hors ligne. Icônes 192/512 et favicon réels, manifeste `fr`, contrôle `npm run pwa:check` vert ; fallback réseau réel non testé hors ligne.
 - [x] IndexedDB (Dexie) : snapshot produits/stock/clients/assureurs/caisse + `outbox`.
 - [x] `sync_events` serveur (idempotence `client_event_id`) + `POST /api/sync/push` + `GET /api/sync/pull`.
-- [x] Vente hors ligne complète (recherche, panier, remise, assurance, ticket).
+- [ ] Vente hors ligne complète (recherche, panier, remise, assurance, ticket). Corrigé : **non fait**, `Vente.vue` lit le serveur et envoie via `router.post` uniquement ; aucune écriture dans l'outbox Dexie.
 - [ ] Caisse et inventaire hors ligne.
 - [x] Écran de conflits + indicateur de sync réel.
 - [ ] Tests coupure/reprise sans perte ni doublon.
 
 ### Qualité
-- [x] CI GitHub Actions (Pint, PHPStan, PHPUnit, ESLint, Vitest, build, Playwright).
-- [ ] Tests de concurrence sur MySQL.
+- [-] CI GitHub Actions : Pint, PHPStan, PHPUnit MySQL/SQLite, ESLint, Prettier, typecheck, build et contrôle PWA verts localement ; Vitest et Playwright toujours absents.
+- [x] Tests de concurrence sur MySQL (`ConcurrentSaleTest`, deux processus sur le dernier article).
 
 ### Mise à jour 31/10/2026 — finalisation livrable V1
 - [x] Sidebar : permissions réelles, compteur Dexie, déconnexion, drawer mobile, `no-print`, `aria-label`.
@@ -383,6 +383,157 @@
 - [x] Valeurs factices supprimées : dashboard (`+8,1 %`, `-5 résolues`, `14 dossiers`), stocks (`fiability`, achats/transferts en dur, `r.lot`), login (doublon `h1`).
 - [x] Build + tests verts après toutes ces corrections ; parcours Vente → Ticket validé en navigateur (Playwright), plus de console error.
 
+
+## Mise à jour du 02/11/2026 — audit code ↔ TODO
+
+> Vérifié dans le code (routes, policies, services, Dexie, tests `php artisan test` : 29 tests OK, 0 échec, 29 dépréciations).
+
+### Faux positifs corrigés dans les sections ci-dessus
+- `Vente hors ligne complète` : passé de `[x]` à `[ ]`.
+- `Chaque transaction locale → file` : `[x]` → `[-]` (`enqueueEvent` jamais appelé).
+- `PWA` : `[x]` → `[-]` (icônes manquantes).
+- `Vérification pharmacy_id à chaque requête` : `[x]` → `[-]` (`guard()` jamais appelé).
+- `Tests policies + smoke` : `[x]` → `[-]` (aucun test de policy).
+- `CI` : `[x]` → `[-]` (pas de Vitest ni Playwright).
+- `Indicateur sync Topbar` : `[ ]` → `[-]` (UI présente, compteur toujours à 0).
+- `Ticket` : génération `[ ]` → `[-]` (ticket existant), réimpression `[x]`.
+
+### Déjà corrigé dans le code (à valider par des tests)
+- Clôture de caisse : seulement espèces + mouvements (`CashController::expectedAmount`). Pas de test.
+- Signe des ajustements : perte/casse forcées négatives (`InventoryController::adjust`). Pas de test.
+- Prix serveur et `pharmacy_id` de vente dérivé de la pharmacie active (`SaleController::store`). Pas de test de falsification.
+- Annulation : motif, `cancelled_by`, dossier assurance annulé (`SaleService::cancel`). Pas d'approbateur.
+
+### Chantiers à REFAIRE (marqués faits, mal faits)
+1. **Vente hors ligne** (Phase 4.4) : brancher `Vente.vue` sur Dexie (produits/stock en lecture, écriture `outbox` via `enqueueEvent`), numéro local, ticket local.
+2. **Synchronisation** : sans alimentation de l'outbox, la file, le compteur Topbar et la boucle `pushBatch` ne servent à rien.
+3. **Rate limiting API sync** : ~~absent~~ → traité au LOT 1 (`throttle:sync`, clé par device).
+4. **Isolation par pharmacie** : ~~aucun test cross-pharmacie~~ → traité au LOT 1 pour ventes, caisses, achats, assurances, transferts, conflits et utilisateurs.
+5. **Super-admin codé en dur** : ~~adresse e-mail codée en dur~~ → traité au LOT 1, `is_super_admin` est l'unique source de vérité.
+6. **Tests** : dépréciations PDO corrigées et tests de sécurité ajoutés au LOT 0/1 ; restent prix falsifié, remise > plafond, caisse, inventaire, annulation et sync.
+7. **PWA** : ~~icônes absentes~~ → traité au LOT 0, icônes réelles et `npm run pwa:check`.
+8. **Annulation** : ajouter l'approbateur et un contrôle de double annulation côté UI.
+
+### Chantiers RESTANTS (non commencés)
+- Phase 0.2 : masquage UI des actions non autorisées, tests 403.
+- Phase 1.1 : historique des prix d'achat ; facture fournisseur (optionnel).
+- Phase 1.4 : retours clients (table, motif, approbateur, restock séparé, audit).
+- Phase 1.5 : unités et conditionnements (`base_unit`, `sale_unit`, `conversion_factor` existent en base, mais aucune logique de vente).
+- Phase 1.6 : lots (`lot_number`), à confirmer avec le client.
+- Phase 2.1 : scanner code-barres (auto-focus + Enter), recherche DCI, modification de conditionnement.
+- Phase 2.5 : table `payment_methods` + CRUD (aucune migration).
+- Phase 2.8 : tests de vente (remise, concurrence, annulation avec lien d'origine).
+- Phase 3.3 : rapports par assureur/période, exports des dossiers.
+- Phase 4 : rapports et exports (PDF/Excel), tableau de bord réseau, tableau de bord pharmacie.
+- Phase 5 : caisse et inventaire hors ligne, auth hors ligne, tests coupure/reprise, retries.
+- Design system : `docs/DESIGN_SYSTEM.md` absent ; primitives (`PageHeader`, `DataTable`, `StatusBadge`, `MoneyInput`, `Toast`, `OfflineBanner`) absentes de `components/ui` (seulement les composants shadcn).
+- Phase 6 : HTTPS, 2FA, sauvegardes, procédures de déploiement, documentation utilisateur, PV de recette, upgrade Laravel 13.
+- Phase 7 : Vitest, Playwright, couverture, concurrence MySQL.
+
+### Hygiène
+- Le PDF du cahier des charges a été supprimé par le commit `39bae6f`. Le restaurer : `git checkout 921e619 -- docs/cahier_des_charges_gestion_pharmacies_v1.pdf`.
+- `package.json.bak` est à la racine : à supprimer si obsolète.
+- `docs/PLAN_IMPLEMENTATION.md` contient les mêmes `[x]` erronés (sections 1.5, 4.2 « rate limiting API sync », 4.4). À aligner sur ce fichier.
+
+## Mise à jour du 02/11/2026 — LOT 0 terminé (baseline reproductible)
+
+> Toutes les preuves ci-dessous ont été exécutées localement sur MySQL 8.4 et PHP 8.5.4.
+
+### Commandes vertes
+
+- `composer test` : **43 tests, 192 assertions**, MySQL `pharmagest_test`, aucune dépréciation.
+- `vendor/bin/pint --test` : OK.
+- `vendor/bin/phpstan analyse --no-progress --memory-limit=1G` : 0 erreur.
+- `npm run lint` : OK.
+- `npm run format:check` : OK.
+- `npm run typecheck` : OK.
+- `npm run build` : OK.
+- `npm run pwa:check` : OK, manifeste `fr`, icônes 192/512, service worker.
+- Migrations `migrate:fresh` → `migrate:rollback` → `migrate` : OK sur SQLite et MySQL.
+
+### Corrections
+
+- [x] `config/database.php` : constante PDO compatible PHP 8.2+ sans dépréciation.
+- [x] `2026_10_30_000001_add_sync_and_security_columns.php` : rollback SQLite corrigé (index retirés avant colonnes).
+- [x] `phpunit.xml` : suite principale sur MySQL `pharmagest_test` ; SQLite conservé pour le contrôle des migrations.
+- [x] ESLint, Prettier et plugins installés ; scripts `lint`, `lint:fix`, `format`, `format:check`, `typecheck`, `pwa:check`.
+- [x] `tsconfig.json` et types Ziggy corrigés ; aucune erreur `vue-tsc`.
+- [x] Formatage Prettier mécanique de `resources/`.
+- [x] PWA : icônes 192/512, favicon réel, manifeste `fr`, contrôle automatique.
+- [x] Fixtures : 8 factories, `Tests\Support\PharmacyScenario`, test multi-sites indépendant de `DemoSeeder`.
+- [x] CI consolidée dans `.github/workflows/ci.yml` (MySQL, SQLite, Pint, PHPStan, PHPUnit, lint, format, typecheck, build, PWA) ; YAML validé localement, exécution GitHub non vérifiée dans cet environnement.
+
+### Limites connues du LOT 0
+
+- Le build conserve un warning de chunk `AppLayout` à ~924 Ko ; non bloquant, à traiter lors du découpage UI.
+- La base `pharmagest_test` doit exister localement et être documentée dans le README.
+
+## Mise à jour du 02/11/2026 — LOT 1 terminé (sécurité et isolation)
+
+### Mesures appliquées
+
+- [x] `is_super_admin` est l'unique source de vérité ; suppression de l'e-mail codé en dur.
+- [x] Super-admin sans affectation : pharmacies accessibles, pharmacie active et partage Inertia cohérents.
+- [x] Périmètre de gestion des utilisateurs : listing filtré, cibles hors périmètre masquées, auto-édition interdite.
+- [x] Attribution limitée aux pharmacies administrées et aux rôles dont les permissions sont incluses dans celles de l'acteur.
+- [x] Policies `UserPolicy` durcies et nouvelle `SyncConflictPolicy` (lecture/résolution par pharmacie).
+- [x] `AuditLogger` accepte un acteur et une pharmacie explicites ; vente et synchronisation les fournissent.
+- [x] Rate limiting de la synchronisation par appareil/IP (`throttle:sync`).
+- [x] Navigation : Clients et Conflits sync masqués sans permission ; actions Utilisateurs masquées selon `can_update`/`can_delete`.
+
+### Tests de sécurité ajoutés
+
+- `tests/Feature/Security/CrossPharmacyIsolationTest.php` : ventes, caisses, achats, assurances, transferts.
+- `tests/Feature/Security/UserManagementSecurityTest.php` : listing, attribution, élévation de rôle, super-admin, audit.
+- `tests/Feature/Security/SyncConflictAuthorizationTest.php` : conflits par pharmacie et super-admin.
+- `tests/Feature/Security/PermissionMatrixTest.php` : vendeur, gérant, responsable régional.
+- `tests/Feature/Security/SyncRateLimitTest.php` : middleware de limitation.
+
+### Limites restantes avant le LOT 2
+
+- Les handlers `SyncController::process` ne vérifient pas encore la permission métier de chaque événement ; prévu au LOT 3.
+- Les référentiels produits/clients/assureurs restent globaux : décision métier à confirmer.
+- La résolution d'un conflit ne rejoue pas encore l'opération métier ; prévu au LOT 3.
+- Les tests de concurrence MySQL et les scénarios de vente avancés restent au LOT 2.
+
+## Mise à jour du 02/11/2026 — LOT 2 terminé (règles métier)
+
+> Validation finale : `67 tests, 374 assertions`, MySQL, sans dépréciation. Pint et PHPStan verts.
+
+### Corrections métier vérifiées
+
+- [x] Vente : prix serveur, paiements mixtes, idempotence, stock concurrent et audit testés.
+- [x] Remise : plafond par rôle, motif et approbation ; remise totale à 0 GNF bloquée ; plafond absolu de 50 % appliqué aussi aux remises en montant.
+- [x] Assurance : la remise globale est répartie proportionnellement entre part client et part assureur.
+- [x] Annulation : restock une seule fois, motif, claim annulé, deuxième annulation refusée.
+- [x] Stock : pertes/casses forcées négatives, correction signée, stock négatif refusé, comptage inventaire idempotent.
+- [x] Stock : double incrément de `version` supprimé dans `StockService`.
+- [x] Caisse : verrou sur la pharmacie pour sérialiser deux ouvertures ; théorique espèces + mouvements et écart testés ; mouvement après clôture refusé.
+- [x] Achats : réception partielle/totale bornée, idempotente, ligne étrangère refusée ; prix d'achat mis à jour via observer de version.
+- [x] Transferts : expédition/réception partielles, bornes, stock source/destination et annulation partielle testés.
+- [x] Assurances : transitions verrouillées en transaction, remboursement borné, rejet et audit testés.
+- [x] Audit : acteur et pharmacie vérifiés sur vente et ouverture de caisse.
+- [x] Concurrence MySQL : deux processus tentent de vendre le dernier article, une seule vente aboutit.
+
+### Fichiers de tests ajoutés
+
+- `tests/Feature/Business/SaleBusinessTest.php`
+- `tests/Feature/Business/StockBusinessTest.php`
+- `tests/Feature/Business/CashBusinessTest.php`
+- `tests/Feature/Business/PurchaseBusinessTest.php`
+- `tests/Feature/Business/TransferBusinessTest.php`
+- `tests/Feature/Business/InsuranceBusinessTest.php`
+- `tests/Feature/Business/AuditTrailBusinessTest.php`
+- `tests/Feature/Business/ConcurrentSaleTest.php`
+- `tests/Support/concurrent_sale.php`
+
+### Limites restantes
+
+- Un transfert partiellement expédié puis réceptionné peut être clôturé alors que des quantités demandées ne sont pas expédiées : règle métier à confirmer avant modification.
+- L'annulation d'une vente ne crée pas encore d'avoir ni de remboursement de caisse distinct (V1.1).
+- Les invariants de stock sont garantis par l'application, pas encore par des contraintes `CHECK` en base.
+- Les handlers de synchronisation doivent encore appliquer les permissions par événement (LOT 3).
+- Les moyens de paiement configurables, retours clients, unités et lots restent hors périmètre LOT 2.
 
 ## Conventions de mise à jour
 - Cocher `[x]` uniquement après validation (tests + build frontend).

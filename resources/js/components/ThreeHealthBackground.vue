@@ -45,12 +45,22 @@ onMounted(() => {
     // floating capsules (pills)
     for (let i = 0; i < 14; i++) {
         const g = new THREE.CapsuleGeometry(0.25, 0.9, 6, 12);
-        addShape(g, pastel[i % pastel.length], [(Math.random() - 0.5) * 16, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 8], 0.9 + Math.random() * 0.6);
+        addShape(
+            g,
+            pastel[i % pastel.length],
+            [(Math.random() - 0.5) * 16, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 8],
+            0.9 + Math.random() * 0.6,
+        );
     }
     // soft spheres
     for (let i = 0; i < 10; i++) {
         const g = new THREE.SphereGeometry(0.35, 24, 24);
-        addShape(g, pastel[i % pastel.length], [(Math.random() - 0.5) * 18, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 10], 0.6 + Math.random() * 0.8);
+        addShape(
+            g,
+            pastel[i % pastel.length],
+            [(Math.random() - 0.5) * 18, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 10],
+            0.6 + Math.random() * 0.8,
+        );
     }
     // medical crosses (two boxes)
     for (let i = 0; i < 6; i++) {

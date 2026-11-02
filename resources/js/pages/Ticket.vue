@@ -58,7 +58,7 @@ onMounted(() => {
     <Head :title="`Ticket ${sale.sale_number}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-2xl p-4 lg:p-8">
-            <div class="mb-4 flex items-center justify-between no-print">
+            <div class="no-print mb-4 flex items-center justify-between">
                 <Link href="/vente" class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
                     <ArrowLeft class="h-4 w-4" /> Retour à la vente
                 </Link>
@@ -70,10 +70,7 @@ onMounted(() => {
                     >
                         <Printer class="h-4 w-4" /> Imprimer
                     </button>
-                    <Link
-                        href="/vente"
-                        class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
-                    >
+                    <Link href="/vente" class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">
                         <Plus class="h-4 w-4" /> Nouvelle vente
                     </Link>
                 </div>
@@ -86,9 +83,7 @@ onMounted(() => {
                         {{ sale.pharmacy.address ?? sale.pharmacy.city ?? '' }}
                         <span v-if="sale.pharmacy.phone"> · Tél. {{ sale.pharmacy.phone }}</span>
                     </div>
-                    <div class="mt-3 border-y border-dashed border-border py-2 text-sm font-medium">
-                        TICKET DE VENTE
-                    </div>
+                    <div class="mt-3 border-y border-dashed border-border py-2 text-sm font-medium">TICKET DE VENTE</div>
                 </div>
 
                 <div class="mb-4 grid grid-cols-2 gap-2 text-sm">
@@ -133,13 +128,15 @@ onMounted(() => {
                     </tbody>
                 </table>
 
-                <div class="mt-4 ml-auto w-full max-w-xs space-y-1 text-sm">
+                <div class="ml-auto mt-4 w-full max-w-xs space-y-1 text-sm">
                     <div class="flex justify-between">
                         <span class="text-muted-foreground">Sous-total</span>
                         <span>{{ money(sale.subtotal) }}</span>
                     </div>
                     <div v-if="sale.discount_amount > 0" class="flex justify-between text-accent">
-                        <span>Remise<span v-if="sale.discount_percent"> ({{ sale.discount_percent }} %)</span></span>
+                        <span
+                            >Remise<span v-if="sale.discount_percent"> ({{ sale.discount_percent }} %)</span></span
+                        >
                         <span>−{{ money(sale.discount_amount) }}</span>
                     </div>
                     <div class="flex justify-between border-t border-border pt-1 font-semibold">
@@ -159,7 +156,9 @@ onMounted(() => {
                 <div v-if="sale.payments.length" class="mt-4 border-t border-dashed border-border pt-3 text-sm">
                     <div class="mb-1 text-xs uppercase text-muted-foreground">Règlements</div>
                     <div v-for="(p, idx) in sale.payments" :key="idx" class="flex justify-between">
-                        <span>{{ methods[p.method] ?? p.method }}<span v-if="p.reference"> · {{ p.reference }}</span></span>
+                        <span
+                            >{{ methods[p.method] ?? p.method }}<span v-if="p.reference"> · {{ p.reference }}</span></span
+                        >
                         <span>{{ money(p.amount) }}</span>
                     </div>
                 </div>

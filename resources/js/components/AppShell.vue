@@ -42,7 +42,7 @@ onMounted(() => {
     // La boucle part uniquement une fois la page Inertia stabilisée :
     // le jeton CSRF partagé peut encore être celui de la page de connexion
     // pendant la transition client-side.
-    idleUnsubscribe = router.on('idle', handleIdle);
+    idleUnsubscribe = router.on('finish', handleIdle);
 });
 
 onUnmounted(() => {

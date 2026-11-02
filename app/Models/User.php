@@ -110,6 +110,18 @@ class User extends Authenticatable
     public function currentPharmacy(): ?Pharmacy
     {
         $id = session('active_pharmacy_id');
+
+        if ($this->is_super_admin) {
+            if ($id) {
+                $pharmacy = Pharmacy::query()->find((int) $id);
+                if ($pharmacy) {
+                    return $pharmacy;
+                }
+            }
+
+            return Pharmacy::query()->orderBy('id')->first();
+        }
+
         if ($id) {
             /** @var Pharmacy|null $pharmacy */
             $pharmacy = $this->pharmacies()->where('pharmacies.id', $id)->first();
@@ -153,5 +165,63 @@ class User extends Authenticatable
         }
 
         return in_array($permission, Permissions::forRole($role), true);
+    }
+
+    /**
+     * Un utilisateur ne peut administrer que les comptes dont toutes les
+     * affectations sont dans son propre périmètre, et dont aucun rôle n'est
+     * supérieur au sien.
+     */
+    public function canManageUser(User $target): bool
+    {
+        if ($this->id === $target->id || ! $this->hasPermission('manage_users')) {
+            return false;
+        }
+
+        if ($this->is_super_admin) {
+            return true;
+        }
+
+        if ($target->is_super_admin) {
+            return false;
+        }
+
+        $assignments = $target->pharmacies()->get();
+
+        if ($assignments->isEmpty()) {
+            return false;
+        }
+
+        foreach ($assignments as $pharmacy) {
+            $role = (string) $pharmacy->pivot->role;
+
+            if (! $this->canAccessPharmacy($pharmacy)
+                || ! $this->hasPermission('manage_users', $pharmacy)
+                || ! $this->canAssignRole($role, $pharmacy)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Empêche un gérant d'attribuer un rôle plus privilégié que le sien.
+     */
+    public function canAssignRole(string $role, Pharmacy $pharmacy): bool
+    {
+        if ($this->is_super_admin) {
+            return true;
+        }
+
+        $actorRole = $this->roleFor($pharmacy);
+        if ($actorRole === null || ! $this->hasPermission('manage_users', $pharmacy)) {
+            return false;
+        }
+
+        return array_diff(
+            Permissions::forRole($role),
+            Permissions::forRole($actorRole),
+        ) === [];
     }
 }

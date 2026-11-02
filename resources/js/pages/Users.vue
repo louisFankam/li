@@ -12,13 +12,18 @@ type UserRow = {
     name: string;
     email: string;
     is_super_admin?: boolean;
+    can_update: boolean;
+    can_delete: boolean;
     pharmacies: { id: number; name: string; role: string }[];
 };
+
+type PharmacyLine = { id: number | null; role: string };
 
 const props = defineProps<{
     users: UserRow[];
     pharmacies: { id: number; name: string }[];
     roles: string[];
+    roles_by_pharmacy: Record<string, string[]>;
 }>();
 
 const roleLabels: Record<string, string> = {
@@ -32,7 +37,19 @@ const roleLabels: Record<string, string> = {
     comptable: 'Comptable',
 };
 
-const emptyPharmacy = () => ({ id: null as number | null, role: 'vendeur' });
+const emptyPharmacy = (): PharmacyLine => ({ id: null, role: 'vendeur' });
+
+function rolesFor(line: PharmacyLine): string[] {
+    if (line.id === null) return props.roles;
+    return props.roles_by_pharmacy[String(line.id)] ?? [];
+}
+
+function onPharmacyChange(line: PharmacyLine) {
+    const available = rolesFor(line);
+    if (!available.includes(line.role)) {
+        line.role = available[0] ?? 'vendeur';
+    }
+}
 
 const form = useForm({
     name: '',
@@ -55,9 +72,7 @@ function edit(user: UserRow) {
     form.name = user.name;
     form.email = user.email;
     form.password = '';
-    form.pharmacies = user.pharmacies.length
-        ? user.pharmacies.map((p) => ({ id: p.id, role: p.role }))
-        : [emptyPharmacy()];
+    form.pharmacies = user.pharmacies.length ? user.pharmacies.map((p) => ({ id: p.id, role: p.role })) : [emptyPharmacy()];
     form.clearErrors();
 }
 
@@ -75,9 +90,7 @@ function submit() {
         name: data.name,
         email: data.email,
         ...(editingId.value === null ? { password: data.password } : {}),
-        pharmacies: data.pharmacies
-            .filter((p) => p.id !== null)
-            .map((p) => ({ id: p.id as number, role: p.role })),
+        pharmacies: data.pharmacies.filter((p) => p.id !== null).map((p) => ({ id: p.id as number, role: p.role })),
     }));
 
     if (editingId.value !== null) {
@@ -157,15 +170,12 @@ function destroy(id: number) {
 
                 <div class="mt-4 flex flex-col gap-2">
                     <div class="text-xs font-medium text-muted-foreground">Accès aux pharmacies</div>
-                    <div
-                        v-for="(line, index) in form.pharmacies"
-                        :key="index"
-                        class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_1.4fr_40px]"
-                    >
+                    <div v-for="(line, index) in form.pharmacies" :key="index" class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_1.4fr_40px]">
                         <select
                             v-model="line.id"
                             class="rounded-md border border-border bg-input px-3 py-2 text-sm"
                             aria-label="Pharmacie"
+                            @change="onPharmacyChange(line)"
                         >
                             <option :value="null">Pharmacie…</option>
                             <option v-for="p in props.pharmacies" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -174,8 +184,9 @@ function destroy(id: number) {
                             v-model="line.role"
                             class="rounded-md border border-border bg-input px-3 py-2 text-sm"
                             aria-label="Rôle"
+                            :disabled="line.id === null"
                         >
-                            <option v-for="r in props.roles" :key="r" :value="r">{{ roleLabels[r] ?? r }}</option>
+                            <option v-for="r in rolesFor(line)" :key="r" :value="r">{{ roleLabels[r] ?? r }}</option>
                         </select>
                         <button
                             type="button"
@@ -210,38 +221,26 @@ function destroy(id: number) {
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="p-5 font-headings text-lg font-bold">Utilisateurs ({{ props.users.length }})</div>
 
-                <div v-if="props.users.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucun utilisateur enregistré.
-                </div>
+                <div v-if="props.users.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">Aucun utilisateur enregistré.</div>
 
-                <div
-                    v-for="u in props.users"
-                    :key="u.id"
-                    class="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3"
-                >
+                <div v-for="u in props.users" :key="u.id" class="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
                             <span class="font-medium">{{ u.name }}</span>
-                            <span
-                                v-if="u.is_super_admin"
-                                class="rounded-sm bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground"
-                            >
+                            <span v-if="u.is_super_admin" class="rounded-sm bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
                                 Super admin
                             </span>
                         </div>
                         <div class="text-xs text-muted-foreground">{{ u.email }}</div>
                         <div class="mt-1 flex flex-wrap gap-1">
-                            <span
-                                v-for="p in u.pharmacies"
-                                :key="p.id"
-                                class="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                            >
+                            <span v-for="p in u.pharmacies" :key="p.id" class="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                 {{ p.name }} · {{ roleLabels[p.role] ?? p.role }}
                             </span>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button
+                            v-if="u.can_update"
                             type="button"
                             class="flex items-center gap-1 rounded-sm border border-border px-2.5 py-1.5 text-xs font-medium"
                             @click="edit(u)"
@@ -249,6 +248,7 @@ function destroy(id: number) {
                             <Pencil class="h-3.5 w-3.5" /> Modifier
                         </button>
                         <button
+                            v-if="u.can_delete"
                             type="button"
                             class="flex items-center gap-1 rounded-sm border border-danger px-2.5 py-1.5 text-xs font-medium text-danger"
                             @click="destroy(u.id)"

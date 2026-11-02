@@ -25,7 +25,7 @@ class UpdateUserRequest extends FormRequest
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:190', Rule::unique('users', 'email')->ignore($target->id)],
             'pharmacies' => ['required', 'array', 'min:1'],
-            'pharmacies.*.id' => ['required', 'integer', 'exists:pharmacies,id'],
+            'pharmacies.*.id' => ['required', 'integer', 'distinct', 'exists:pharmacies,id'],
             'pharmacies.*.role' => ['required', 'string', Rule::in(User::ROLES)],
         ];
     }

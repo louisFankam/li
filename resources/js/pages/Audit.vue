@@ -47,9 +47,7 @@ const form = reactive({
 
 const expanded = ref<number | null>(null);
 
-const hasFilters = computed(
-    () => Boolean(form.action || form.user_id || form.pharmacy_id),
-);
+const hasFilters = computed(() => Boolean(form.action || form.user_id || form.pharmacy_id));
 
 function apply() {
     router.get(
@@ -105,22 +103,14 @@ function formatValues(values: Record<string, unknown> | null): string {
                 </div>
                 <div class="flex flex-col gap-1">
                     <label for="audit-user" class="text-xs font-medium text-muted-foreground">Utilisateur</label>
-                    <select
-                        id="audit-user"
-                        v-model="form.user_id"
-                        class="w-48 rounded-md border border-border bg-input px-3 py-2 text-sm"
-                    >
+                    <select id="audit-user" v-model="form.user_id" class="w-48 rounded-md border border-border bg-input px-3 py-2 text-sm">
                         <option :value="null">Tous</option>
                         <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
                     </select>
                 </div>
                 <div class="flex flex-col gap-1">
                     <label for="audit-pharmacy" class="text-xs font-medium text-muted-foreground">Pharmacie</label>
-                    <select
-                        id="audit-pharmacy"
-                        v-model="form.pharmacy_id"
-                        class="w-48 rounded-md border border-border bg-input px-3 py-2 text-sm"
-                    >
+                    <select id="audit-pharmacy" v-model="form.pharmacy_id" class="w-48 rounded-md border border-border bg-input px-3 py-2 text-sm">
                         <option :value="null">Toutes</option>
                         <option v-for="p in pharmacies" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
@@ -133,11 +123,7 @@ function formatValues(values: Record<string, unknown> | null): string {
                     <label for="audit-to" class="text-xs font-medium text-muted-foreground">Au</label>
                     <input id="audit-to" v-model="form.to" type="date" class="rounded-md border border-border bg-input px-3 py-2 text-sm" />
                 </div>
-                <button
-                    type="button"
-                    class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white"
-                    @click="apply"
-                >
+                <button type="button" class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white" @click="apply">
                     <Filter class="h-4 w-4" /> Filtrer
                 </button>
                 <button

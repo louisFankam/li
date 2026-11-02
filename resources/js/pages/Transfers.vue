@@ -28,7 +28,7 @@ type Transfer = {
     date: string;
 };
 
-const props = defineProps<{
+defineProps<{
     transfers: Transfer[];
     pharmacies: { id: number; name: string }[];
     products: { id: number; name: string }[];
@@ -151,16 +151,8 @@ function canCancel(transfer: Transfer): boolean {
                     </div>
 
                     <div class="flex flex-col gap-2">
-                        <div
-                            v-for="(it, index) in form.items"
-                            :key="index"
-                            class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_120px_40px]"
-                        >
-                            <select
-                                v-model="it.product_id"
-                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
-                                aria-label="Produit"
-                            >
+                        <div v-for="(it, index) in form.items" :key="index" class="grid grid-cols-1 gap-2 md:grid-cols-[2fr_120px_40px]">
+                            <select v-model="it.product_id" class="rounded-md border border-border bg-input px-3 py-2 text-sm" aria-label="Produit">
                                 <option :value="null">Produit…</option>
                                 <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }}</option>
                             </select>
@@ -201,9 +193,7 @@ function canCancel(transfer: Transfer): boolean {
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="p-5 font-headings text-lg font-bold">Transferts</div>
 
-                <div v-if="transfers.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucun transfert enregistré.
-                </div>
+                <div v-if="transfers.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">Aucun transfert enregistré.</div>
 
                 <div v-for="t in transfers" :key="t.id" class="border-t border-border p-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -267,9 +257,7 @@ function canCancel(transfer: Transfer): boolean {
                             />
                         </div>
                         <div class="mt-3 flex justify-end gap-2">
-                            <button type="button" class="rounded-md border border-border px-3 py-1.5 text-sm" @click="closePanel">
-                                Annuler
-                            </button>
+                            <button type="button" class="rounded-md border border-border px-3 py-1.5 text-sm" @click="closePanel">Annuler</button>
                             <button
                                 type="button"
                                 class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white"

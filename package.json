@@ -7,7 +7,10 @@
     "dev": "vite",
     "format": "prettier --write resources/",
     "format:check": "prettier --check resources/",
-    "lint": "eslint . --fix"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "pwa:check": "node scripts/check-pwa.mjs",
+    "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@headlessui/vue": "^1.7.23",
@@ -39,5 +42,14 @@
     "vue": "^3.5.13",
     "vue-tsc": "^2.2.0",
     "ziggy-js": "^2.4.2"
+  },
+  "devDependencies": {
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.12.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "prettier-plugin-tailwindcss": "^0.8.1"
   }
 }

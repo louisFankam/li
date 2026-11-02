@@ -16,19 +16,31 @@ jobs:
           MYSQL_ROOT_PASSWORD: password
         ports: ['3306:3306']
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+    env:
+      DB_CONNECTION: mysql
+      DB_DATABASE: pharmagest_test
+      DB_USERNAME: root
+      DB_PASSWORD: password
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: pdo, pdo_mysql, mbstring, xml, ctype, json, bcmath
+          php-version: '8.4'
+          extensions: pdo, pdo_mysql, pdo_sqlite, mbstring, xml, ctype, json, bcmath
           tools: composer:v2
+      - run: composer validate --no-check-publish
       - run: composer install --no-interaction --prefer-dist
       - run: cp .env.example .env
       - run: php artisan key:generate
       - run: vendor/bin/pint --test
       - run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
-      - run: php artisan test
+      - run: composer test
+      - name: SQLite migration compatibility
+        run: |
+          touch /tmp/pharmagest.sqlite
+          DB_CONNECTION=sqlite DB_DATABASE=/tmp/pharmagest.sqlite php artisan migrate:fresh --force
+          DB_CONNECTION=sqlite DB_DATABASE=/tmp/pharmagest.sqlite php artisan migrate:rollback --force
+          DB_CONNECTION=sqlite DB_DATABASE=/tmp/pharmagest.sqlite php artisan migrate --force
 
   frontend:
     runs-on: ubuntu-latest
@@ -39,4 +51,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
       - run: npm run build
+      - run: npm run pwa:check

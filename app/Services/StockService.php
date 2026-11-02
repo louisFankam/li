@@ -60,13 +60,9 @@ class StockService
             ]);
         }
 
-        // Les mises à jour en masse ne déclenchent pas les observateurs :
-        // on force l'incrément de version utilisé par le pull offline.
-        StockLevel::query()
-            ->where('pharmacy_id', $pharmacyId)
-            ->where('product_id', $productId)
-            ->increment('version');
-
+        // VersionObserver incrémente déjà `version` lors de la sauvegarde du
+        // modèle. Un second incrément créerait des trous inutiles dans le
+        // curseur de synchronisation.
         return StockMovement::create([
             'pharmacy_id' => $pharmacyId,
             'product_id' => $productId,

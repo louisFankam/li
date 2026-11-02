@@ -91,11 +91,7 @@ function activate(pharmacyId: number) {
                 :key="p.id"
                 type="button"
                 class="rounded-sm px-3 py-1.5 text-sm font-medium"
-                :class="
-                    activePharmacyId === p.id
-                        ? 'bg-dark text-white'
-                        : 'text-muted-foreground hover:text-foreground'
-                "
+                :class="activePharmacyId === p.id ? 'bg-dark text-white' : 'text-muted-foreground hover:text-foreground'"
                 @click="activate(p.id)"
             >
                 {{ p.short }}
@@ -111,9 +107,7 @@ function activate(pharmacyId: number) {
             <span class="text-sm font-medium" :class="isOnline ? 'text-accent' : 'text-danger'">
                 {{ isOnline ? 'En ligne' : 'Hors ligne' }}
             </span>
-            <span class="hidden text-xs text-muted-foreground sm:inline">
-                · {{ pending }} en attente · {{ syncLabel }}
-            </span>
+            <span class="hidden text-xs text-muted-foreground sm:inline"> · {{ pending }} en attente · {{ syncLabel }} </span>
         </div>
 
         <Link

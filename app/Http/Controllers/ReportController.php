@@ -236,8 +236,8 @@ class ReportController extends Controller
             foreach ($rows as $c) {
                 fputcsv($out, [
                     $c->reference ?? 'PEC-'.$c->id,
-                    $c->insuranceCompany?->name,
-                    $c->sale?->customer?->name ?? 'Comptoir',
+                    $c->insuranceCompany->name,
+                    (string) data_get($c, 'sale.customer.name', 'Comptoir'),
                     $c->created_at,
                     $c->total_amount,
                     $c->insurer_part,

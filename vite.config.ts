@@ -22,19 +22,21 @@ export default defineConfig({
         }),
         VitePWA({
             registerType: 'autoUpdate',
-            includeAssets: ['favicon.ico', 'robots.txt'],
+            includeAssets: ['favicon.ico', 'robots.txt', 'pwa-192.png', 'pwa-512.png'],
             manifest: {
+                id: '/',
                 name: 'PharmaGest',
                 short_name: 'PharmaGest',
                 description: 'Gestion de pharmacies',
+                lang: 'fr',
                 theme_color: '#0e9f6e',
                 background_color: '#f3f7f4',
                 display: 'standalone',
                 start_url: '/',
                 scope: '/',
                 icons: [
-                    { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
-                    { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
+                    { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+                    { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
                 ],
             },
             workbox: {

@@ -160,8 +160,11 @@ function exportBordereau() {
                     <div class="p-5 font-headings text-lg font-bold">Prises en charge</div>
                     <div class="overflow-x-auto">
                         <div class="min-w-[820px]">
-                            <div class="grid grid-cols-[1fr_1.6fr_1fr_1fr_1fr_1fr_1.2fr] bg-muted/60 px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                                <span>N° PEC</span><span>Bénéficiaire</span><span>Total</span><span>Assureur</span><span>Client</span><span>Remboursé</span><span class="text-right">Statut</span>
+                            <div
+                                class="grid grid-cols-[1fr_1.6fr_1fr_1fr_1fr_1fr_1.2fr] bg-muted/60 px-4 py-2.5 text-xs font-medium text-muted-foreground"
+                            >
+                                <span>N° PEC</span><span>Bénéficiaire</span><span>Total</span><span>Assureur</span><span>Client</span
+                                ><span>Remboursé</span><span class="text-right">Statut</span>
                             </div>
                             <div v-if="claims.length === 0" class="px-4 py-10 text-center text-sm text-muted-foreground">
                                 Aucune prise en charge sur cette période.
@@ -213,9 +216,7 @@ function exportBordereau() {
                                     <span class="font-medium">{{ c.name }}</span>
                                     <span class="font-bold">{{ c.ventes }}</span>
                                 </div>
-                                <div class="text-xs text-muted-foreground">
-                                    {{ c.code }} · {{ c.dossiers }} dossier(s) · encours {{ c.solde }}
-                                </div>
+                                <div class="text-xs text-muted-foreground">{{ c.code }} · {{ c.dossiers }} dossier(s) · encours {{ c.solde }}</div>
                                 <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
                                     <div class="h-full rounded-full bg-primary" :style="{ width: Math.min(100, c.part) + '%' }"></div>
                                 </div>
@@ -225,9 +226,7 @@ function exportBordereau() {
 
                     <div class="rounded-lg bg-dark p-6 text-white">
                         <div class="flex items-center gap-2 font-headings text-lg font-bold">Bordereau</div>
-                        <div v-if="bordereau.length === 0" class="mt-1 text-sm opacity-70">
-                            Aucun dossier en attente de facturation.
-                        </div>
+                        <div v-if="bordereau.length === 0" class="mt-1 text-sm opacity-70">Aucun dossier en attente de facturation.</div>
                         <div v-else class="mt-3 space-y-2 text-sm">
                             <div v-for="b in bordereau" :key="b.id" class="flex justify-between gap-3">
                                 <span class="opacity-80">{{ b.name }} · {{ b.dossiers }} dossier(s)</span>

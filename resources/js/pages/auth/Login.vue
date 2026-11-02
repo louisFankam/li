@@ -103,8 +103,7 @@ onMounted(() => {
                 </form>
 
                 <p class="mt-6 text-center text-xs text-slate-500">
-                    Accès réservé au personnel PharmaGest. Contactez votre pharmacien titulaire pour
-                    la création de votre compte.
+                    Accès réservé au personnel PharmaGest. Contactez votre pharmacien titulaire pour la création de votre compte.
                 </p>
             </div>
         </div>

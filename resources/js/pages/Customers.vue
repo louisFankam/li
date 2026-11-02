@@ -144,9 +144,7 @@ function destroy(id: number) {
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="p-5 font-headings text-lg font-bold">Clients ({{ props.customers.length }})</div>
 
-                <div v-if="props.customers.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">
-                    Aucun client enregistré.
-                </div>
+                <div v-if="props.customers.length === 0" class="px-5 py-8 text-center text-sm text-muted-foreground">Aucun client enregistré.</div>
 
                 <div
                     v-for="c in props.customers"

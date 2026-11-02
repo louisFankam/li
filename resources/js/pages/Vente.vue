@@ -87,11 +87,7 @@ const filtered = computed(() => {
     return props.products.filter((p) => {
         if (activeCategory.value && p.category !== activeCategory.value) return false;
         if (!q) return true;
-        return (
-            p.name.toLowerCase().includes(q) ||
-            (p.generic_name ?? '').toLowerCase().includes(q) ||
-            (p.barcode ?? '').toLowerCase().includes(q)
-        );
+        return p.name.toLowerCase().includes(q) || (p.generic_name ?? '').toLowerCase().includes(q) || (p.barcode ?? '').toLowerCase().includes(q);
     });
 });
 
@@ -107,9 +103,7 @@ const clientPart = computed(() => preview.value?.client_part ?? localSubtotal.va
 const paid = computed(() => payments.value.reduce((s, p) => s + (Number(p.amount) || 0), 0));
 const remaining = computed(() => clientPart.value - paid.value);
 
-const needsReason = computed(
-    () => discountPercent.value > props.discountCap.percent || discountAmount.value > props.discountCap.amount,
-);
+const needsReason = computed(() => discountPercent.value > props.discountCap.percent || discountAmount.value > props.discountCap.amount);
 
 function add(product: Product) {
     if (product.stock <= 0) return;
@@ -169,10 +163,7 @@ function removePayment(index: number) {
 }
 
 function fillRemaining(index: number) {
-    const others = payments.value.reduce(
-        (s, p, i) => (i === index ? s : s + (Number(p.amount) || 0)),
-        0,
-    );
+    const others = payments.value.reduce((s, p, i) => (i === index ? s : s + (Number(p.amount) || 0)), 0);
     payments.value[index].amount = Math.max(0, clientPart.value - others);
     paymentsTouched.value = true;
 }
@@ -347,9 +338,7 @@ onBeforeUnmount(() => {
                                 <X class="h-4 w-4" />
                             </button>
                         </div>
-                        <span class="text-xs text-muted-foreground">
-                            Vente bloquée si stock = 0
-                        </span>
+                        <span class="text-xs text-muted-foreground"> Vente bloquée si stock = 0 </span>
                     </div>
 
                     <div class="no-print flex flex-wrap gap-2">
@@ -387,10 +376,7 @@ onBeforeUnmount(() => {
                             <span class="text-xs text-muted-foreground">Prix serveur · stock temps réel</span>
                         </div>
 
-                        <div
-                            v-if="filtered.length === 0"
-                            class="px-5 py-10 text-center text-sm text-muted-foreground"
-                        >
+                        <div v-if="filtered.length === 0" class="px-5 py-10 text-center text-sm text-muted-foreground">
                             Aucun produit ne correspond à la recherche.
                         </div>
 
@@ -407,15 +393,11 @@ onBeforeUnmount(() => {
                             </div>
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <span class="truncate font-medium text-[15px]">{{ p.name }}</span>
+                                    <span class="truncate text-[15px] font-medium">{{ p.name }}</span>
                                     <span
                                         v-if="p.tag"
                                         class="rounded-sm px-2 py-0.5 text-xs font-medium"
-                                        :class="
-                                            p.stock === 0
-                                                ? 'bg-danger-soft text-danger'
-                                                : 'bg-warning-soft text-gold'
-                                        "
+                                        :class="p.stock === 0 ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-gold'"
                                     >
                                         {{ p.tag }}
                                     </span>
@@ -426,11 +408,7 @@ onBeforeUnmount(() => {
                                     · Stock :
                                     <span
                                         :class="
-                                            p.stock === 0
-                                                ? 'font-medium text-danger'
-                                                : p.stock < p.alert_threshold
-                                                  ? 'font-medium text-gold'
-                                                  : ''
+                                            p.stock === 0 ? 'font-medium text-danger' : p.stock < p.alert_threshold ? 'font-medium text-gold' : ''
                                         "
                                     >
                                         {{ p.stock }}
@@ -443,9 +421,7 @@ onBeforeUnmount(() => {
                                 :disabled="p.stock === 0"
                                 class="shrink-0 rounded-md px-4 py-2 text-sm font-medium"
                                 :class="
-                                    p.stock === 0
-                                        ? 'cursor-not-allowed bg-muted text-muted-foreground'
-                                        : 'bg-primary text-white hover:bg-primary/90'
+                                    p.stock === 0 ? 'cursor-not-allowed bg-muted text-muted-foreground' : 'bg-primary text-white hover:bg-primary/90'
                                 "
                                 @click="add(p)"
                             >
@@ -509,9 +485,7 @@ onBeforeUnmount(() => {
                                     % · plafond {{ discountCap.percent }} % / {{ money(discountCap.amount) }}
                                 </span>
                             </div>
-                            <label v-if="needsReason" for="discount-reason" class="text-xs text-muted-foreground">
-                                Motif
-                            </label>
+                            <label v-if="needsReason" for="discount-reason" class="text-xs text-muted-foreground"> Motif </label>
                             <input
                                 v-if="needsReason"
                                 id="discount-reason"
@@ -525,10 +499,7 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div class="flex max-h-[45vh] flex-1 flex-col gap-3 overflow-auto p-4">
-                        <div
-                            v-if="cart.length === 0"
-                            class="py-8 text-center text-sm text-muted-foreground"
-                        >
+                        <div v-if="cart.length === 0" class="py-8 text-center text-sm text-muted-foreground">
                             Ajoutez des produits pour démarrer un ticket.
                         </div>
 
@@ -544,9 +515,7 @@ onBeforeUnmount(() => {
                                     <X class="h-4 w-4" />
                                 </button>
                             </div>
-                            <div class="mt-0.5 text-xs text-muted-foreground">
-                                {{ line.qty }} × {{ money(line.price) }} · stock {{ line.stock }}
-                            </div>
+                            <div class="mt-0.5 text-xs text-muted-foreground">{{ line.qty }} × {{ money(line.price) }} · stock {{ line.stock }}</div>
                             <div class="mt-2.5 flex items-center justify-between">
                                 <div class="flex items-center rounded-sm border border-border">
                                     <button
@@ -602,13 +571,7 @@ onBeforeUnmount(() => {
                         <div class="mt-4 space-y-2">
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Règlements</span>
-                                <button
-                                    type="button"
-                                    class="text-xs font-medium text-primary hover:underline"
-                                    @click="addPayment"
-                                >
-                                    + Ajouter
-                                </button>
+                                <button type="button" class="text-xs font-medium text-primary hover:underline" @click="addPayment">+ Ajouter</button>
                             </div>
 
                             <div v-for="(p, index) in payments" :key="index" class="flex items-center gap-2">
@@ -652,10 +615,7 @@ onBeforeUnmount(() => {
                                     Reste à encaisser
                                     <span v-if="previewing" class="text-xs">(calcul…)</span>
                                 </span>
-                                <span
-                                    class="font-medium"
-                                    :class="remaining === 0 ? 'text-accent' : remaining < 0 ? 'text-danger' : 'text-gold'"
-                                >
+                                <span class="font-medium" :class="remaining === 0 ? 'text-accent' : remaining < 0 ? 'text-danger' : 'text-gold'">
                                     {{ money(remaining) }}
                                 </span>
                             </div>

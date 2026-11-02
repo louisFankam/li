@@ -71,9 +71,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('transfers/{transfer}/cancel', [TransferController::class, 'cancel'])->name('transfers.cancel');
 
     // Synchronisation offline (PWA)
-    Route::post('sync/device', [SyncController::class, 'registerDevice'])->name('sync.device');
-    Route::post('api/sync/push', [SyncController::class, 'push'])->name('sync.push');
-    Route::get('api/sync/pull', [SyncController::class, 'pull'])->name('sync.pull');
+    Route::middleware('throttle:sync')->group(function () {
+        Route::post('sync/device', [SyncController::class, 'registerDevice'])->name('sync.device');
+        Route::post('api/sync/push', [SyncController::class, 'push'])->name('sync.push');
+        Route::get('api/sync/pull', [SyncController::class, 'pull'])->name('sync.pull');
+    });
     Route::get('sync/conflicts', [SyncController::class, 'conflicts'])->name('sync.conflicts');
     Route::post('sync/conflicts/{conflict}/resolve', [SyncController::class, 'resolveConflict'])->name('sync.conflicts.resolve');
 });

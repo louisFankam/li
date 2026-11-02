@@ -150,7 +150,12 @@ class PurchaseController extends Controller
                     );
 
                     // Dernier prix d'achat connu : sert à valoriser le stock.
-                    Product::whereKey($item->product_id)->update(['purchase_price' => $item->unit_price]);
+                    // Une mise à jour de modèle (et non de masse) déclenche
+                    // VersionObserver pour propager le prix aux clients offline.
+                    Product::query()
+                        ->whereKey($item->product_id)
+                        ->first()
+                        ?->update(['purchase_price' => $item->unit_price]);
                 }
 
                 $item->update(['quantity_received' => $new]);

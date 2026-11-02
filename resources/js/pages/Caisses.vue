@@ -51,7 +51,7 @@ const openForm = useForm({ opening_amount: 0 });
 const closeForm = useForm({ closing_amount: 0, notes: '' });
 const moveForm = useForm({ type: 'entree', amount: 0, reason: '' });
 
-function openSession() {
+function openCash() {
     openForm.post(route('caisses.open'), { preserveScroll: true, onSuccess: () => openForm.reset() });
 }
 
@@ -96,7 +96,7 @@ function fillExpected() {
                 <div class="mb-3 flex items-center gap-2 font-headings text-lg font-bold">
                     <UnlockKeyhole class="h-5 w-5 text-primary" /> Ouvrir une session de caisse
                 </div>
-                <form class="flex flex-wrap items-end gap-3" @submit.prevent="openSession">
+                <form class="flex flex-wrap items-end gap-3" @submit.prevent="openCash">
                     <div class="flex flex-col gap-1">
                         <label for="opening" class="text-xs text-muted-foreground">Fond initial (GNF)</label>
                         <input
@@ -144,10 +144,17 @@ function fillExpected() {
 
                     <div class="mt-4">
                         <div class="mb-2 text-sm font-medium">Mouvements de la session</div>
-                        <div v-if="openSessionInfo.movements.length === 0" class="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                        <div
+                            v-if="openSessionInfo.movements.length === 0"
+                            class="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground"
+                        >
                             Aucun mouvement pour l'instant.
                         </div>
-                        <div v-for="m in openSessionInfo.movements" :key="m.id" class="flex items-center justify-between border-b border-border py-2 text-sm last:border-0">
+                        <div
+                            v-for="m in openSessionInfo.movements"
+                            :key="m.id"
+                            class="flex items-center justify-between border-b border-border py-2 text-sm last:border-0"
+                        >
                             <span class="flex items-center gap-2">
                                 <ArrowUpCircle v-if="m.type === 'entree'" class="h-4 w-4 text-accent" />
                                 <ArrowDownCircle v-else class="h-4 w-4 text-danger" />
@@ -165,7 +172,11 @@ function fillExpected() {
                     <div class="rounded-lg border border-border bg-card p-5">
                         <div class="mb-3 text-sm font-medium">Nouveau mouvement</div>
                         <form class="flex flex-col gap-2" @submit.prevent="movement(openSessionInfo.id)">
-                            <select v-model="moveForm.type" class="rounded-md border border-border bg-input px-3 py-2 text-sm" aria-label="Type de mouvement">
+                            <select
+                                v-model="moveForm.type"
+                                class="rounded-md border border-border bg-input px-3 py-2 text-sm"
+                                aria-label="Type de mouvement"
+                            >
                                 <option value="entree">Entrée de caisse</option>
                                 <option value="retrait">Retrait / dépense</option>
                             </select>
@@ -207,9 +218,7 @@ function fillExpected() {
                                     class="min-w-0 flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm"
                                     aria-label="Montant compté"
                                 />
-                                <button type="button" class="rounded-md border border-border px-3 py-2 text-xs" @click="fillExpected">
-                                    Attendu
-                                </button>
+                                <button type="button" class="rounded-md border border-border px-3 py-2 text-xs" @click="fillExpected">Attendu</button>
                             </div>
                             <textarea
                                 v-model="closeForm.notes"

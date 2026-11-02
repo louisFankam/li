@@ -9,6 +9,7 @@ use App\Http\Requests\OpenCashRequest;
 use App\Models\CashMovement;
 use App\Models\CashSession;
 use App\Models\Payment;
+use App\Models\Pharmacy;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,11 +97,13 @@ class CashController extends Controller
         $pharmacy = $this->pharmacy($request);
 
         $session = DB::transaction(function () use ($request, $pharmacy) {
-            // Verrou pessimiste : deux ouvertures simultanées ne doivent pas
-            // créer deux sessions ouvertes pour la même pharmacie.
+            // Verrouiller la pharmacie sérialise aussi le cas où aucune
+            // session n'existe encore : un verrou sur une ligne absente ne
+            // protège pas deux ouvertures concurrentes.
+            Pharmacy::whereKey($pharmacy->id)->lockForUpdate()->firstOrFail();
+
             $alreadyOpen = CashSession::where('pharmacy_id', $pharmacy->id)
                 ->where('status', 'open')
-                ->lockForUpdate()
                 ->exists();
 
             if ($alreadyOpen) {
