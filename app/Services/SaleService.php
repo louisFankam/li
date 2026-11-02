@@ -10,7 +10,6 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockLevel;
-use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -111,23 +110,18 @@ class SaleService
             }
 
             foreach ($quantities as $productId => $quantity) {
-                StockLevel::query()
-                    ->where('pharmacy_id', $pharmacy->id)
-                    ->where('product_id', $productId)
-                    ->update([
-                        'quantity' => DB::raw('quantity - '.$quantity),
-                        'version' => DB::raw('version + 1'),
-                    ]);
-
-                StockMovement::create([
-                    'pharmacy_id' => $pharmacy->id,
-                    'product_id' => $productId,
-                    'type' => 'vente',
-                    'quantity' => -$quantity,
-                    'reference_type' => 'sale',
-                    'reference_id' => $sale->id,
-                    'user_id' => $user->id,
-                ]);
+                // Passer par StockService déclenche les observers de version
+                // et de synchronisation, contrairement à une mise à jour de masse.
+                $this->stock->apply(
+                    $pharmacy,
+                    $productId,
+                    -$quantity,
+                    'vente',
+                    null,
+                    $user->id,
+                    'sale',
+                    $sale->id,
+                );
             }
 
             foreach ($payments as $payment) {

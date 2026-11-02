@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Rapports', href: '/rapports' }];
 const props = defineProps<{
@@ -9,6 +11,8 @@ const props = defineProps<{
     filters: { from: string; to: string };
 }>();
 
+const { can } = usePermissions();
+const canExport = computed(() => can('export_data'));
 const from = props.filters?.from || '';
 const to = props.filters?.to || '';
 
@@ -38,7 +42,7 @@ function exportCsv() {
                     <input id="to" type="date" :value="to" class="rounded-md border border-border px-3 py-2 text-sm" />
                 </div>
                 <button @click="apply" class="rounded-md bg-primary px-4 py-2 text-sm text-white">Filtrer</button>
-                <button @click="exportCsv" class="rounded-md border border-border px-4 py-2 text-sm">Exporter CSV</button>
+                <button v-if="canExport" @click="exportCsv" class="rounded-md border border-border px-4 py-2 text-sm">Exporter CSV</button>
             </div>
             <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <div class="grid grid-cols-6 bg-muted/60 px-4 py-2.5 text-xs font-medium text-muted-foreground">

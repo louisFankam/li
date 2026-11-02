@@ -24,6 +24,9 @@ type Transfer = {
     to: string;
     to_id: number;
     status: string;
+    can_ship: boolean;
+    can_receive: boolean;
+    can_cancel: boolean;
     items: TransferItem[];
     date: string;
 };
@@ -112,15 +115,15 @@ function cancel(transfer: Transfer) {
 }
 
 function canShip(transfer: Transfer): boolean {
-    return ['valide', 'partiellement_expedie'].includes(transfer.status);
+    return transfer.can_ship;
 }
 
 function canReceive(transfer: Transfer): boolean {
-    return ['expedie', 'partiellement_expedie', 'partiellement_recu'].includes(transfer.status);
+    return transfer.can_receive;
 }
 
 function canCancel(transfer: Transfer): boolean {
-    return !['recu', 'annule'].includes(transfer.status);
+    return transfer.can_cancel;
 }
 </script>
 

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue';
 import { useSidebar } from '@/components/ui/sidebar';
-import { db } from '@/offline/db';
-import { pendingCount } from '@/offline/sync';
+import { usePermissions } from '@/composables/usePermissions';
+import { syncState } from '@/offline/sync';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnline } from '@vueuse/core';
 import { Menu } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 
 defineProps<{
     title?: string;
@@ -17,45 +17,21 @@ defineProps<{
 type SharedProps = {
     pharmacies?: { id: number; name: string; short: string; city: string | null }[];
     activePharmacyId?: number | null;
-    auth?: { permissions?: string[]; user?: { is_super_admin?: boolean } | null };
 };
 
 const page = usePage<SharedProps>();
 const pharmacies = computed(() => page.props.pharmacies ?? []);
 const activePharmacyId = computed(() => page.props.activePharmacyId ?? null);
-const canSell = computed(() => {
-    if (page.props.auth?.user?.is_super_admin) return true;
-    return (page.props.auth?.permissions ?? []).includes('make_sales');
-});
+const { can } = usePermissions();
+const showSaleAction = computed(() => page.url === '/dashboard' && can('make_sales'));
 
 const { toggleSidebar } = useSidebar();
 const isOnline = useOnline();
-const pending = ref(0);
-const lastSync = ref<string | null>(null);
-let timer: ReturnType<typeof setInterval> | undefined;
-
-async function refreshSync() {
-    try {
-        pending.value = await pendingCount();
-        const meta = await db.meta.get('last_sync');
-        lastSync.value = typeof meta?.value === 'string' ? meta.value : null;
-    } catch {
-        pending.value = 0;
-    }
-}
 
 const syncLabel = computed(() => {
-    if (!lastSync.value) return 'Jamais synchronisé';
-    return 'Synchro ' + new Date(lastSync.value).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-});
-
-onMounted(() => {
-    refreshSync();
-    timer = setInterval(refreshSync, 15000);
-});
-
-onBeforeUnmount(() => {
-    if (timer) clearInterval(timer);
+    if (syncState.syncing) return 'Synchronisation…';
+    if (!syncState.lastSync) return 'Jamais synchronisé';
+    return 'Synchro ' + new Date(syncState.lastSync).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 });
 
 function activate(pharmacyId: number) {
@@ -101,28 +77,21 @@ function activate(pharmacyId: number) {
         <div
             class="flex items-center gap-2 rounded-md border px-3 py-2"
             :class="isOnline ? 'border-primary/20 bg-success-soft' : 'border-danger/30 bg-danger-soft'"
-            :title="syncLabel"
+            :title="syncState.error ?? syncLabel"
         >
             <span class="h-2.5 w-2.5 rounded-full" :class="isOnline ? 'bg-primary' : 'bg-danger'" />
             <span class="text-sm font-medium" :class="isOnline ? 'text-accent' : 'text-danger'">
                 {{ isOnline ? 'En ligne' : 'Hors ligne' }}
             </span>
-            <span class="hidden text-xs text-muted-foreground sm:inline"> · {{ pending }} en attente · {{ syncLabel }} </span>
+            <span class="hidden text-xs text-muted-foreground sm:inline"> · {{ syncState.pending }} en attente · {{ syncLabel }} </span>
         </div>
 
         <Link
-            v-if="canSell"
+            v-if="showSaleAction"
             href="/vente"
             class="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
         >
             <Icon name="plus" :size="16" /> Nouvelle vente
         </Link>
-        <button
-            type="button"
-            class="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
-            aria-label="Notifications"
-        >
-            <Icon name="bell" :size="18" />
-        </button>
     </div>
 </template>

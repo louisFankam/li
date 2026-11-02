@@ -81,6 +81,11 @@ for (const file of ['sw.js', 'registerSW.js']) {
     }
 }
 
+const serviceWorker = readFileSync(resolve(build, 'sw.js'), 'utf8');
+if (serviceWorker.includes('/api/sync/pull') || serviceWorker.includes('sync-pull')) {
+    fail('authenticated sync responses must not be cached by the service worker');
+}
+
 try {
     if (statSync(resolve(publicDir, 'favicon.ico')).size === 0) {
         fail('favicon.ico is empty');

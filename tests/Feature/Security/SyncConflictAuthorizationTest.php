@@ -32,6 +32,7 @@ class SyncConflictAuthorizationTest extends TestCase
         $this->post("/sync/conflicts/{$conflictA->id}/resolve", ['resolution' => 'applied'])
             ->assertRedirect();
 
+        $this->assertNull(session('error'), (string) session('error'));
         $this->assertSame('applied', $conflictA->fresh()->status);
         $this->assertSame($scenario->regional->id, $conflictA->fresh()->resolved_by);
     }
@@ -42,10 +43,10 @@ class SyncConflictAuthorizationTest extends TestCase
         $conflictB = $this->conflict($scenario, $scenario->pharmacyB->id);
 
         $this->actingAs($scenario->admin)
-            ->post("/sync/conflicts/{$conflictB->id}/resolve", ['resolution' => 'adjusted'])
+            ->post("/sync/conflicts/{$conflictB->id}/resolve", ['resolution' => 'cancelled'])
             ->assertRedirect();
 
-        $this->assertSame('adjusted', $conflictB->fresh()->status);
+        $this->assertSame('cancelled', $conflictB->fresh()->status);
     }
 
     private function conflict(PharmacyScenario $scenario, int $pharmacyId): SyncConflict
@@ -53,9 +54,9 @@ class SyncConflictAuthorizationTest extends TestCase
         $event = SyncEvent::create([
             'client_event_id' => (string) Str::uuid(),
             'pharmacy_id' => $pharmacyId,
-            'user_id' => $scenario->sellerA->id,
+            'user_id' => $scenario->manager->id,
             'type' => 'stock.adjusted',
-            'payload' => ['product_id' => $scenario->product->id, 'delta' => -1],
+            'payload' => ['product_id' => $scenario->product->id, 'type' => 'correction', 'delta' => -1],
             'schema_version' => 1,
             'occurred_at' => now(),
             'received_at' => now(),

@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router } from '@inertiajs/vue3';
-import { Download, Filter } from 'lucide-vue-next';
-import { reactive } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Building2, Download, Filter } from 'lucide-vue-next';
+import { computed, reactive } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Assurances', href: '/assurances' }];
 
@@ -56,6 +57,9 @@ const props = defineProps<{
     filters: { from: string | null; to: string | null; status: string | null };
 }>();
 
+const { can } = usePermissions();
+const canExport = computed(() => can('export_data'));
+
 const form = reactive({
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
@@ -103,6 +107,15 @@ function exportBordereau() {
     <Head title="Assurances" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-5 p-4 lg:p-8">
+            <div class="flex justify-end">
+                <Link
+                    href="/insurers"
+                    class="flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-muted"
+                >
+                    <Building2 class="h-4 w-4" /> Gérer les assureurs
+                </Link>
+            </div>
+
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-lg border border-border bg-card p-5">
                     <div class="text-xs font-medium text-muted-foreground">Ventes assurées</div>
@@ -234,6 +247,7 @@ function exportBordereau() {
                             </div>
                         </div>
                         <button
+                            v-if="canExport"
                             type="button"
                             class="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-medium text-white disabled:opacity-50"
                             :disabled="bordereau.length === 0"

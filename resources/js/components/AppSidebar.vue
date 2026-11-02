@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSidebar } from '@/components/ui/sidebar';
-import { pendingCount } from '@/offline/sync';
+import { syncState } from '@/offline/sync';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { useOnline } from '@vueuse/core';
 import {
@@ -20,7 +20,7 @@ import {
     Wallet,
     Zap,
 } from 'lucide-vue-next';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 
 type NavItem = {
     label: string;
@@ -73,7 +73,16 @@ function can(permission?: string): boolean {
     return permissions.value.includes(permission);
 }
 
-const visibleNav = computed<NavEntry[]>(() => nav.filter((item) => !('permission' in item) || can(item.permission)));
+const visibleNav = computed<NavEntry[]>(() => {
+    const visible = nav.filter((item) => !('permission' in item) || can(item.permission));
+
+    return visible.filter((item, index) => {
+        if (!('section' in item)) return true;
+
+        const next = visible[index + 1];
+        return next !== undefined && !('section' in next);
+    });
+});
 
 const userInitials = computed(() => {
     const name = auth.value?.name ?? '';
@@ -89,25 +98,6 @@ const userInitials = computed(() => {
 const { isMobile, openMobile, setOpenMobile } = useSidebar();
 
 const isOnline = useOnline();
-const pending = ref(0);
-let timer: ReturnType<typeof setInterval> | undefined;
-
-async function refreshPending() {
-    try {
-        pending.value = await pendingCount();
-    } catch {
-        pending.value = 0;
-    }
-}
-
-onMounted(() => {
-    refreshPending();
-    timer = setInterval(refreshPending, 15000);
-});
-
-onBeforeUnmount(() => {
-    if (timer) clearInterval(timer);
-});
 
 function logout() {
     router.post(route('logout'));
@@ -186,7 +176,7 @@ watch(
                     <span class="h-2.5 w-2.5 rounded-full" :class="isOnline ? 'bg-primary' : 'bg-danger'" />
                     <span class="text-sm font-medium text-white">{{ isOnline ? 'En ligne' : 'Hors ligne' }}</span>
                 </div>
-                <div class="mt-1.5 text-xs leading-relaxed opacity-60">{{ pending }} opération(s) en attente de synchronisation.</div>
+                <div class="mt-1.5 text-xs leading-relaxed opacity-60">{{ syncState.pending }} opération(s) en attente de synchronisation.</div>
             </div>
             <div class="mt-4 flex items-center gap-2.5 px-1">
                 <div class="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">

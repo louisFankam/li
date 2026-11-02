@@ -2,435 +2,396 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CashMovement;
-use App\Models\CashSession;
+use App\Exceptions\SyncRejectedException;
 use App\Models\Customer;
 use App\Models\Device;
 use App\Models\InsuranceCompany;
 use App\Models\InsuranceRule;
-use App\Models\Payment;
 use App\Models\Pharmacy;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\StockLevel;
+use App\Models\SyncChange;
 use App\Models\SyncConflict;
 use App\Models\SyncEvent;
-use App\Services\AuditLogger;
+use App\Models\User;
 use App\Services\PharmacyContext;
-use App\Services\SaleService;
-use App\Services\StockService;
+use App\Services\SyncChangeRecorder;
+use App\Services\SyncEventProcessor;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use PDOException;
+use Throwable;
 
 class SyncController extends Controller
 {
-    public function push(Request $request, PharmacyContext $context): JsonResponse
+    public function push(Request $request, SyncEventProcessor $processor): JsonResponse
     {
         $request->validate([
             'device_token' => ['required', 'string'],
             'events' => ['required', 'array', 'min:1', 'max:100'],
             'events.*.client_event_id' => ['required', 'uuid'],
             'events.*.type' => ['required', 'string', 'max:60'],
-            'events.*.payload' => ['required', 'array'],
+            'events.*.payload' => ['present', 'array'],
             'events.*.occurred_at' => ['nullable', 'date'],
             'events.*.pharmacy_id' => ['nullable', 'integer'],
-            'events.*.schema_version' => ['nullable', 'integer'],
+            'events.*.schema_version' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $device = Device::where('token_hash', hash('sha256', $request->input('device_token')))->whereNull('revoked_at')->first();
-        abort_unless($device !== null, 401, 'Appareil non autorisé.');
-
+        $device = $this->device($request);
         $device->update(['last_seen_at' => now()]);
         $user = $device->user;
-        $accessible = $user->is_super_admin ? Pharmacy::pluck('id')->all() : $user->pharmacies()->pluck('pharmacies.id')->all();
+        $accessible = $this->accessibleIds($user);
 
         $results = [];
 
         foreach ($request->input('events') as $event) {
             $clientEventId = $event['client_event_id'];
-
-            $existing = SyncEvent::where('client_event_id', $clientEventId)->first();
-            if ($existing) {
-                $results[] = [
-                    'client_event_id' => $clientEventId,
-                    'status' => $existing->status === 'applied' ? 'duplicate' : $existing->status,
-                    'error' => $existing->error,
-                ];
-
-                continue;
-            }
-
             $pharmacyId = $event['pharmacy_id'] ?? $device->pharmacy_id;
+            $payload = $event['payload'];
+            $payloadHash = $this->payloadHash($payload);
+
             if ($pharmacyId !== null && ! in_array((int) $pharmacyId, $accessible, true)) {
-                $results[] = [
-                    'client_event_id' => $clientEventId,
-                    'status' => 'rejected',
-                    'error' => 'Pharmacie inaccessible.',
-                ];
+                $results[] = $this->result($clientEventId, 'rejected', 'Pharmacie inaccessible.');
 
                 continue;
             }
 
-            $syncEvent = SyncEvent::create([
-                'client_event_id' => $clientEventId,
-                'pharmacy_id' => $pharmacyId,
-                'device_id' => $device->id,
-                'user_id' => $user->id,
-                'type' => $event['type'],
-                'payload' => $event['payload'],
-                'schema_version' => $event['schema_version'] ?? 1,
-                'occurred_at' => $event['occurred_at'] ?? now(),
-                'received_at' => now(),
-                'status' => 'pending',
-            ]);
+            $existing = SyncEvent::query()->where('client_event_id', $clientEventId)->first();
 
-            try {
-                DB::transaction(function () use ($syncEvent) {
-                    $this->process($syncEvent);
-                    $syncEvent->update(['status' => 'applied', 'processed_at' => now()]);
-                });
-                $results[] = ['client_event_id' => $clientEventId, 'status' => 'applied'];
-            } catch (\Throwable $e) {
-                $syncEvent->update(['status' => 'conflict', 'error' => $e->getMessage(), 'attempts' => $syncEvent->attempts + 1]);
-                SyncConflict::create([
-                    'sync_event_id' => $syncEvent->id,
-                    'pharmacy_id' => $syncEvent->pharmacy_id,
-                    'type' => $syncEvent->type,
-                    'details' => ['error' => $e->getMessage(), 'payload' => $syncEvent->payload],
-                    'status' => 'open',
+            if ($existing !== null) {
+                $existingHash = $existing->payload_hash ?? $this->payloadHash($existing->payload);
+
+                if ((int) $existing->device_id !== $device->id
+                    || (int) $existing->user_id !== $user->id
+                    || (int) $existing->pharmacy_id !== ($pharmacyId !== null ? (int) $pharmacyId : null)
+                    || ! hash_equals($existingHash, $payloadHash)) {
+                    $results[] = $this->result($clientEventId, 'rejected', 'Identifiant d’événement déjà utilisé avec un autre contenu ou appareil.');
+
+                    continue;
+                }
+
+                if ($existing->status === 'applied') {
+                    $results[] = $this->attachSaleResource(
+                        $this->result($clientEventId, 'duplicate'),
+                        $existing,
+                    );
+
+                    continue;
+                }
+
+                if (in_array($existing->status, ['rejected', 'cancelled'], true)) {
+                    $results[] = $this->result($clientEventId, 'rejected', $existing->error);
+
+                    continue;
+                }
+
+                if ($existing->status === 'conflict') {
+                    $results[] = $this->result($clientEventId, 'conflict', $existing->error);
+
+                    continue;
+                }
+
+                $syncEvent = $existing;
+            } else {
+                $syncEvent = SyncEvent::create([
+                    'client_event_id' => $clientEventId,
+                    'pharmacy_id' => $pharmacyId,
+                    'device_id' => $device->id,
+                    'user_id' => $user->id,
+                    'type' => $event['type'],
+                    'payload' => $payload,
+                    'payload_hash' => $payloadHash,
+                    'schema_version' => $event['schema_version'] ?? 1,
+                    'occurred_at' => $event['occurred_at'] ?? now(),
+                    'received_at' => now(),
+                    'status' => 'pending',
                 ]);
-                $results[] = ['client_event_id' => $clientEventId, 'status' => 'conflict', 'error' => $e->getMessage()];
             }
+
+            $results[] = $this->attachSaleResource(
+                $this->execute($syncEvent, $processor),
+                $syncEvent,
+            );
         }
 
         return response()->json(['results' => $results]);
     }
 
-    public function pull(Request $request): JsonResponse
+    public function pull(Request $request, SyncChangeRecorder $recorder): JsonResponse
     {
         $request->validate([
-            'device_token' => ['required', 'string'],
             'since' => ['nullable', 'integer', 'min:0'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'events' => ['nullable', 'string', 'max:4000'],
         ]);
 
-        $device = Device::where('token_hash', hash('sha256', $request->input('device_token')))->whereNull('revoked_at')->first();
-        abort_unless($device !== null, 401, 'Appareil non autorisé.');
-
+        $device = $this->device($request);
         $device->update(['last_seen_at' => now()]);
-        $user = $device->user;
-        $accessible = $user->is_super_admin ? Pharmacy::pluck('id')->all() : $user->pharmacies()->pluck('pharmacies.id')->all();
-
+        $accessible = $this->accessibleIds($device->user);
         $since = (int) $request->input('since', 0);
+        $eventStatuses = $this->eventStatuses($request, $device);
 
-        // `since` = dernière version connue du poste. On ne renvoie que les
-        // lignes modifiées depuis. Pour un premier pull (since = 0), on renvoie
-        // tout le référentiel, y compris les lignes historiques en version 0.
-        $modified = fn ($query) => $since > 0 ? $query->where('version', '>', $since) : $query;
+        if ($since === 0) {
+            // Lire le curseur avant le snapshot : toute écriture qui arrive
+            // ensuite aura un identifiant supérieur et sera donc renvoyée au
+            // pull suivant, même si le snapshot contenait un état plus récent.
+            $cursor = (int) (SyncChange::query()->max('id') ?? 0);
 
-        $changes = [
-            'products' => $modified(Product::where('is_active', true))->get()->map(fn ($p) => [
-                'id' => $p->id,
-                'code' => $p->code,
-                'barcode' => $p->barcode,
-                'name' => $p->name,
-                'generic_name' => $p->generic_name,
-                'form' => $p->form,
-                'dosage' => $p->dosage,
-                'laboratory' => $p->laboratory,
-                'category_id' => $p->category_id,
-                'base_unit' => $p->base_unit,
-                'sale_unit' => $p->sale_unit,
-                'conversion_factor' => $p->conversion_factor,
-                'purchase_price' => $p->purchase_price,
-                'sale_price' => $p->sale_price,
-                'alert_threshold' => $p->alert_threshold,
-                'version' => $p->version,
-            ]),
-            'customers' => $modified(Customer::query())->get()->map(fn ($c) => [
-                'id' => $c->id,
-                'name' => $c->name,
-                'phone' => $c->phone,
-                'email' => $c->email,
-                'insurance_company_id' => $c->insurance_company_id,
-                'version' => $c->version,
-            ]),
-            'insurers' => $modified(InsuranceCompany::where('is_active', true))->get()->map(fn ($i) => [
-                'id' => $i->id,
-                'name' => $i->name,
-                'code' => $i->code,
-                'version' => $i->version,
-            ]),
-            'insurance_rules' => $modified(InsuranceRule::query())->get()->map(fn (InsuranceRule $r) => [
-                'id' => $r->id,
-                'insurance_company_id' => $r->insurance_company_id,
-                'product_id' => $r->product_id,
-                'category_id' => $r->category_id,
-                'type' => $r->type,
-                'value' => $r->value,
-                'version' => $r->version,
-            ]),
-            'stock_levels' => $modified(StockLevel::whereIn('pharmacy_id', $accessible))->get()->map(fn ($s) => [
-                'pharmacy_id' => $s->pharmacy_id,
-                'product_id' => $s->product_id,
-                'quantity' => $s->quantity,
-                'version' => $s->version,
-            ]),
-        ];
-
-        $maxVersion = (int) max(
-            Product::max('version') ?? 0,
-            Customer::max('version') ?? 0,
-            InsuranceCompany::max('version') ?? 0,
-            InsuranceRule::max('version') ?? 0,
-            StockLevel::whereIn('pharmacy_id', $accessible)->max('version') ?? 0,
-        );
-
-        return response()->json([
-            'server_time' => now()->toIso8601String(),
-            'version' => $maxVersion,
-            'changes' => $changes,
-        ]);
-    }
-
-    private function process(SyncEvent $event): void
-    {
-        $payload = $event->payload ?? [];
-
-        match ($event->type) {
-            'sale.created' => $this->processSaleCreated($event, $payload),
-            'sale.cancelled' => $this->processSaleCancelled($event, $payload),
-            'cash.opened' => $this->processCashOpened($event, $payload),
-            'cash.closed' => $this->processCashClosed($event, $payload),
-            'cash.movement' => $this->processCashMovement($event, $payload),
-            'stock.adjusted' => $this->processStockAdjusted($event, $payload),
-            'inventory.counted' => $this->processInventoryCounted($event, $payload),
-            default => null,
-        };
-    }
-
-    private function processSaleCreated(SyncEvent $event, array $payload): void
-    {
-        $pharmacyId = $event->pharmacy_id;
-        abort_if($pharmacyId === null, 422, 'Pharmacie manquante.');
-
-        $clientRequestId = $payload['client_request_id'] ?? $event->client_event_id;
-
-        $existing = Sale::where('client_request_id', $clientRequestId)->first();
-        if ($existing) {
-            return;
-        }
-
-        // Delegate to SaleService using server prices.
-        $data = $payload;
-        $data['client_request_id'] = $clientRequestId;
-        $user = $event->user;
-        abort_if($user === null, 422, 'Utilisateur manquant.');
-        $pharmacy = Pharmacy::findOrFail($pharmacyId);
-        app(SaleService::class)->create($user, $pharmacy, $data, null);
-    }
-
-    private function processSaleCancelled(SyncEvent $event, array $payload): void
-    {
-        $sale = Sale::where('client_request_id', $payload['client_request_id'] ?? null)->first();
-        if (! $sale || $sale->status === 'cancelled') {
-            return;
-        }
-
-        $user = $event->user;
-        abort_if($user === null, 422, 'Utilisateur manquant.');
-
-        app(SaleService::class)->cancel($user, $sale, (string) ($payload['reason'] ?? 'Annulation hors ligne'));
-    }
-
-    private function processCashOpened(SyncEvent $event, array $payload): void
-    {
-        $pharmacyId = $this->requirePharmacy($event);
-
-        if (CashSession::where('pharmacy_id', $pharmacyId)->where('status', 'open')->exists()) {
-            return;
-        }
-
-        $session = CashSession::create([
-            'pharmacy_id' => $pharmacyId,
-            'user_id' => $event->user_id,
-            'opening_amount' => (int) ($payload['opening_amount'] ?? 0),
-            'status' => 'open',
-            'opened_at' => $event->occurred_at ?? now(),
-        ]);
-
-        app(AuditLogger::class)->log('cash.opened', CashSession::class, $session->id, [], [
-            'pharmacy_id' => $pharmacyId,
-            'opening_amount' => $session->opening_amount,
-            'source' => 'sync',
-        ], actor: $event->user, pharmacy: $pharmacyId);
-    }
-
-    private function processCashClosed(SyncEvent $event, array $payload): void
-    {
-        $pharmacyId = $this->requirePharmacy($event);
-
-        $session = isset($payload['session_id'])
-            ? CashSession::where('pharmacy_id', $pharmacyId)->whereKey($payload['session_id'])->first()
-            : CashSession::where('pharmacy_id', $pharmacyId)->where('status', 'open')->latest()->first();
-
-        if (! $session || $session->status !== 'open') {
-            return;
-        }
-
-        $expected = $this->expectedCash($session);
-        $closing = (int) ($payload['closing_amount'] ?? $expected);
-
-        $session->update([
-            'closing_amount' => $closing,
-            'expected_amount' => $expected,
-            'difference' => $closing - $expected,
-            'status' => 'closed',
-            'closed_at' => $event->occurred_at ?? now(),
-            'notes' => $payload['notes'] ?? $session->notes,
-        ]);
-
-        app(AuditLogger::class)->log('cash.closed', CashSession::class, $session->id, ['status' => 'open'], [
-            'status' => 'closed',
-            'expected' => $expected,
-            'closing' => $closing,
-            'source' => 'sync',
-        ], actor: $event->user, pharmacy: $pharmacyId);
-    }
-
-    private function processCashMovement(SyncEvent $event, array $payload): void
-    {
-        $pharmacyId = $this->requirePharmacy($event);
-
-        $session = isset($payload['session_id'])
-            ? CashSession::where('pharmacy_id', $pharmacyId)->whereKey($payload['session_id'])->first()
-            : CashSession::where('pharmacy_id', $pharmacyId)->where('status', 'open')->latest()->first();
-
-        if (! $session || $session->status !== 'open') {
-            throw ValidationException::withMessages([
-                'cash_session_id' => 'Aucune session de caisse ouverte pour ce mouvement.',
+            return response()->json([
+                'server_time' => now()->toIso8601String(),
+                'mode' => 'snapshot',
+                'records' => $this->snapshot($recorder, $accessible),
+                'next_cursor' => $cursor,
+                'has_more' => false,
+                'event_statuses' => $eventStatuses,
+                'settings' => $this->settings(),
             ]);
         }
 
-        $type = (string) ($payload['type'] ?? '');
-        if (! in_array($type, ['entree', 'retrait'], true)) {
-            throw ValidationException::withMessages(['type' => 'Type de mouvement invalide.']);
-        }
+        $limit = (int) $request->input('limit', 100);
+        $rows = SyncChange::query()
+            ->where('id', '>', $since)
+            ->where(function ($query) use ($accessible) {
+                $query->whereNull('pharmacy_id')->orWhereIn('pharmacy_id', $accessible);
+            })
+            ->orderBy('id')
+            ->limit($limit + 1)
+            ->get();
 
-        $amount = (int) ($payload['amount'] ?? 0);
-        if ($amount <= 0) {
-            throw ValidationException::withMessages(['amount' => 'Le montant doit être positif.']);
-        }
+        $hasMore = $rows->count() > $limit;
+        $rows = $rows->take($limit)->values();
 
-        $movement = CashMovement::create([
-            'cash_session_id' => $session->id,
-            'type' => $type,
-            'amount' => $amount,
-            'reason' => $payload['reason'] ?? null,
-            'user_id' => $event->user_id,
+        return response()->json([
+            'server_time' => now()->toIso8601String(),
+            'mode' => 'changes',
+            'records' => $rows->map(fn (SyncChange $change) => $this->changeRecord($change))->values(),
+            'next_cursor' => $rows->isNotEmpty() ? (int) $rows->last()->id : $since,
+            'has_more' => $hasMore,
+            'event_statuses' => $eventStatuses,
+            'settings' => $this->settings(),
         ]);
-
-        app(AuditLogger::class)->log('cash.movement', CashMovement::class, $movement->id, [], [
-            'session_id' => $session->id,
-            'type' => $type,
-            'amount' => $amount,
-            'source' => 'sync',
-        ], actor: $event->user, pharmacy: $pharmacyId);
     }
 
-    private function processStockAdjusted(SyncEvent $event, array $payload): void
+    private function execute(SyncEvent $event, SyncEventProcessor $processor): array
     {
-        $pharmacyId = $this->requirePharmacy($event);
-        $productId = (int) ($payload['product_id'] ?? 0);
-        abort_if($productId <= 0, 422, 'Produit manquant.');
+        try {
+            DB::transaction(function () use ($event, $processor) {
+                $processor->apply($event);
+                $event->update([
+                    'status' => 'applied',
+                    'error' => null,
+                    'attempts' => $event->attempts + 1,
+                    'processed_at' => now(),
+                ]);
+            });
 
-        $delta = isset($payload['delta']) ? (int) $payload['delta'] : (int) ($payload['quantity'] ?? 0);
-        if ($delta === 0) {
-            return;
-        }
+            return $this->result($event->client_event_id, 'applied');
+        } catch (SyncRejectedException $e) {
+            $event->update([
+                'status' => 'rejected',
+                'error' => $e->getMessage(),
+                'attempts' => $event->attempts + 1,
+                'processed_at' => now(),
+            ]);
 
-        $type = (string) ($payload['type'] ?? 'correction');
-        if (! in_array($type, ['correction', 'perte', 'casse', 'inventaire'], true)) {
-            $type = 'correction';
-        }
+            return $this->result($event->client_event_id, 'rejected', $e->getMessage());
+        } catch (PDOException $e) {
+            $event->update([
+                'status' => 'failed',
+                'error' => $e->getMessage(),
+                'attempts' => $event->attempts + 1,
+            ]);
 
-        app(StockService::class)->apply(
-            $pharmacyId,
-            $productId,
-            $delta,
-            $type,
-            $payload['reason'] ?? 'Ajustement hors ligne',
-            $event->user_id,
-        );
+            return $this->result($event->client_event_id, 'failed', 'Erreur temporaire, nouvelle tentative possible.');
+        } catch (Throwable $e) {
+            $event->update([
+                'status' => 'conflict',
+                'error' => $e->getMessage(),
+                'attempts' => $event->attempts + 1,
+            ]);
 
-        app(AuditLogger::class)->log('stock.adjusted', null, null, [], [
-            'pharmacy_id' => $pharmacyId,
-            'product_id' => $productId,
-            'type' => $type,
-            'delta' => $delta,
-            'source' => 'sync',
-        ], actor: $event->user, pharmacy: $pharmacyId);
-    }
-
-    private function processInventoryCounted(SyncEvent $event, array $payload): void
-    {
-        $pharmacyId = $this->requirePharmacy($event);
-        $counts = $payload['counts'] ?? [];
-
-        if (! is_array($counts) || $counts === []) {
-            return;
-        }
-
-        $stock = app(StockService::class);
-        foreach ($counts as $count) {
-            $productId = (int) ($count['product_id'] ?? 0);
-            if ($productId <= 0) {
-                continue;
-            }
-
-            $stock->setCount(
-                $pharmacyId,
-                $productId,
-                (int) ($count['counted'] ?? 0),
-                $event->user_id,
-                'Comptage physique hors ligne',
+            SyncConflict::query()->firstOrCreate(
+                ['sync_event_id' => $event->id, 'status' => 'open'],
+                [
+                    'pharmacy_id' => $event->pharmacy_id,
+                    'type' => $event->type,
+                    'details' => ['error' => $e->getMessage(), 'payload' => $event->payload],
+                ],
             );
+
+            return $this->result($event->client_event_id, 'conflict', $e->getMessage());
+        }
+    }
+
+    /**
+     * @param  array<int>  $accessible
+     * @return array<int, array<string, mixed>>
+     */
+    private function snapshot(SyncChangeRecorder $recorder, array $accessible): array
+    {
+        $records = [];
+
+        foreach (Product::query()->orderBy('id')->get() as $product) {
+            $records[] = $this->snapshotRecord($recorder, $product, 'product', null);
+        }
+        foreach (Customer::query()->orderBy('id')->get() as $customer) {
+            $records[] = $this->snapshotRecord($recorder, $customer, 'customer', null);
+        }
+        foreach (InsuranceCompany::query()->orderBy('id')->get() as $insurer) {
+            $records[] = $this->snapshotRecord($recorder, $insurer, 'insurer', null);
+        }
+        foreach (InsuranceRule::query()->orderBy('id')->get() as $rule) {
+            $records[] = $this->snapshotRecord($recorder, $rule, 'insurance_rule', null);
+        }
+        foreach (StockLevel::query()->whereIn('pharmacy_id', $accessible)->orderBy('id')->get() as $stock) {
+            $records[] = $this->snapshotRecord($recorder, $stock, 'stock_level', $stock->pharmacy_id);
         }
 
-        app(AuditLogger::class)->log('inventory.counted', null, null, [], [
+        return $records;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotRecord(SyncChangeRecorder $recorder, Model $model, string $type, ?int $pharmacyId): array
+    {
+        return [
+            'entity_type' => $type,
+            'operation' => 'upsert',
             'pharmacy_id' => $pharmacyId,
-            'lines' => count($counts),
-            'source' => 'sync',
-        ], actor: $event->user, pharmacy: $pharmacyId);
+            'payload' => $recorder->payload($model),
+        ];
     }
 
-    private function requirePharmacy(SyncEvent $event): int
+    /**
+     * @return array<string, mixed>
+     */
+    private function changeRecord(SyncChange $change): array
     {
-        abort_if($event->pharmacy_id === null, 422, 'Pharmacie manquante.');
-
-        return (int) $event->pharmacy_id;
+        return [
+            'entity_type' => $change->entity_type,
+            'operation' => $change->operation,
+            'pharmacy_id' => $change->pharmacy_id,
+            'payload' => $change->payload,
+            'changed_at' => $change->changed_at->toIso8601String(),
+        ];
     }
 
-    private function expectedCash(CashSession $session): int
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    private function attachSaleResource(array $result, SyncEvent $event): array
     {
-        $cashPayments = Payment::whereHas('sale', function ($q) use ($session) {
-            $q->where('pharmacy_id', $session->pharmacy_id)->where('status', 'completed');
-        })
-            ->whereIn('method', ['especes', 'espèces', 'espece', 'espèce', 'cash'])
-            ->whereBetween('created_at', [$session->opened_at ?? $session->created_at, now()])
-            ->sum('amount');
+        if ($event->type !== 'sale.created' || ! in_array($result['status'], ['applied', 'duplicate'], true)) {
+            return $result;
+        }
 
-        $movements = CashMovement::where('cash_session_id', $session->id)->get();
-        $net = $movements->where('type', 'entree')->sum('amount')
-            - $movements->where('type', 'retrait')->sum('amount');
+        $clientRequestId = $event->payload['client_request_id'] ?? $event->client_event_id;
+        $sale = Sale::query()
+            ->where('client_request_id', $clientRequestId)
+            ->where('pharmacy_id', $event->pharmacy_id)
+            ->first();
 
-        return (int) ($session->opening_amount + $cashPayments + $net);
+        if ($sale !== null) {
+            $result['sale'] = [
+                'id' => $sale->id,
+                'sale_number' => $sale->sale_number,
+                'total' => $sale->total,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function result(string $clientEventId, string $status, ?string $error = null): array
+    {
+        return array_filter([
+            'client_event_id' => $clientEventId,
+            'status' => $status,
+            'error' => $error,
+        ], fn ($value) => $value !== null);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function settings(): array
+    {
+        return [
+            'discounts' => [
+                'absolute_max_percent' => (int) config('discounts.absolute_max_percent', 50),
+                'caps' => config('discounts.caps', []),
+                'default' => config('discounts.default', []),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function eventStatuses(Request $request, Device $device): array
+    {
+        $ids = collect(explode(',', (string) $request->input('events', '')))
+            ->map(fn (string $id) => trim($id))
+            ->filter()
+            ->unique()
+            ->take(20)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return SyncEvent::query()
+            ->where('device_id', $device->id)
+            ->whereIn('client_event_id', $ids)
+            ->pluck('status', 'client_event_id')
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function payloadHash(array $payload): string
+    {
+        return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+    }
+
+    private function device(Request $request): Device
+    {
+        $token = (string) ($request->input('device_token') ?? $request->header('X-Device-Token', ''));
+        abort_if($token === '', 401, 'Appareil non autorisé.');
+
+        $device = Device::query()
+            ->where('token_hash', hash('sha256', $token))
+            ->whereNull('revoked_at')
+            ->first();
+
+        abort_unless($device !== null, 401, 'Appareil non autorisé.');
+
+        return $device;
+    }
+
+    /**
+     * @return array<int>
+     */
+    private function accessibleIds(User $user): array
+    {
+        return $user->is_super_admin
+            ? Pharmacy::query()->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : $user->pharmacies()->pluck('pharmacies.id')->map(fn ($id) => (int) $id)->all();
     }
 
     public function registerDevice(Request $request): JsonResponse
@@ -477,9 +438,11 @@ class SyncController extends Controller
         foreach ($rows as $c) {
             $conflicts[] = [
                 'id' => $c->id,
+                'sync_event_id' => $c->sync_event_id,
                 'type' => $c->type,
                 'pharmacy' => $c->pharmacy !== null ? (string) $c->pharmacy->getAttribute('name') : null,
                 'details' => $c->details,
+                'payload' => $c->syncEvent->payload,
                 'created_at' => $c->created_at->format('d/m/Y H:i'),
             ];
         }
@@ -487,16 +450,57 @@ class SyncController extends Controller
         return Inertia::render('SyncConflicts', ['conflicts' => $conflicts]);
     }
 
-    public function resolveConflict(Request $request, SyncConflict $conflict): RedirectResponse
-    {
+    public function resolveConflict(
+        Request $request,
+        SyncConflict $conflict,
+        SyncEventProcessor $processor,
+    ): RedirectResponse {
         $this->authorize('resolve', $conflict);
-        $data = $request->validate(['resolution' => ['required', 'in:applied,cancelled,adjusted']]);
-
-        $conflict->update([
-            'status' => $data['resolution'],
-            'resolved_by' => $request->user()->id,
-            'resolved_at' => now(),
+        $data = $request->validate([
+            'resolution' => ['required', 'in:applied,cancelled,adjusted'],
+            'payload' => ['required_if:resolution,adjusted', 'nullable', 'array'],
         ]);
+
+        $event = $conflict->syncEvent;
+
+        try {
+            DB::transaction(function () use ($conflict, $event, $data, $request, $processor) {
+                $conflict = SyncConflict::query()->whereKey($conflict->id)->lockForUpdate()->firstOrFail();
+                $event = SyncEvent::query()->whereKey($event->id)->lockForUpdate()->firstOrFail();
+
+                if ($data['resolution'] === 'cancelled') {
+                    $event->update([
+                        'status' => 'rejected',
+                        'error' => 'Annulé lors de la résolution du conflit.',
+                        'processed_at' => now(),
+                    ]);
+                } else {
+                    if ($data['resolution'] === 'adjusted') {
+                        $event->update([
+                            'payload' => $data['payload'],
+                            'payload_hash' => $this->payloadHash($data['payload']),
+                        ]);
+                    }
+
+                    $processor->apply($event);
+                    $event->update([
+                        'status' => 'applied',
+                        'error' => null,
+                        'processed_at' => now(),
+                    ]);
+                }
+
+                $conflict->update([
+                    'status' => $data['resolution'],
+                    'resolved_by' => $request->user()->id,
+                    'resolved_at' => now(),
+                ]);
+            });
+        } catch (SyncRejectedException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (Throwable $e) {
+            return back()->with('error', 'Le conflit n’a pas pu être appliqué : '.$e->getMessage());
+        }
 
         return redirect()->back()->with('success', 'Conflit résolu');
     }

@@ -42,13 +42,6 @@ export default defineConfig({
             workbox: {
                 navigateFallback: '/',
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-                runtimeCaching: [
-                    {
-                        urlPattern: /^\/api\/sync\/pull/,
-                        handler: 'NetworkFirst',
-                        options: { cacheName: 'sync-pull', expiration: { maxEntries: 10, maxAgeSeconds: 86400 } },
-                    },
-                ],
             },
             devOptions: { enabled: false },
         }),

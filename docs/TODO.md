@@ -243,23 +243,24 @@
 
 ### 5.2 File d'événements
 - [x] Table `sync_events` : idempotency key, origine site, type, payload, statut, tentatives
-- [-] Chaque transaction locale → événement persistant dans la file : `enqueueEvent()` n'est appelé nulle part, `Vente.vue` envoie directement en ligne
+- [-] Chaque transaction locale → événement persistant : vente hors ligne branchée et atomique ; caisse et inventaire restent au LOT 6
 
 ### 5.3 Service de synchronisation
 - [x] Envoi automatique à la reconnexion
-- [ ] Retries après échec sans perte
+- [x] Retries après échec sans perte : statut `failed` conservé et rejouable côté serveur, outbox client retentée
 - [x] Accusé de réception; statut central "synchronisé" uniquement après ACK
 - [x] Idempotence : répétition d'envoi ne crée pas de doublon
 
 ### 5.4 Conflits
 - [x] Journalisation des conflits + présentation à un responsable
-- [x] Aucune opération écartée silencieusement
+- [x] Résolution réelle : appliquer, annuler ou ajuster le payload, avec trace du responsable
+- [x] Aucune opération écartée silencieusement : types inconnus rejetés, no-op transformés en conflit
 
 ### 5.5 Données de référence versionnées
-- [x] Produits, prix, règles de remise, comptes versionnés et diffusés aux sites
+- [-] Produits, clients, assureurs, règles d'assurance et stocks diffusés par journal monotone et tombstones ; règles de remise et comptes toujours hors pull
 
 ### 5.6 UI de sync
-- [-] Indicateur permanent en haut (Topbar) : état connexion/sync, nb opérations en attente, dernière sync réussie (UI en place, mais compteur toujours à 0 tant que l'outbox n'est pas alimentée)
+- [x] Indicateur permanent en haut (Topbar) : état partagé et réactif, nombre d'opérations locales et dernière synchronisation
 - [ ] Rapports centraux : signaler sites non synchronisés
 - [ ] Transferts inter-sites non confirmés tant que sync complète
 
@@ -366,7 +367,7 @@
 - [ ] Tests coupure/reprise sans perte ni doublon.
 
 ### Qualité
-- [-] CI GitHub Actions : Pint, PHPStan, PHPUnit MySQL/SQLite, ESLint, Prettier, typecheck, build et contrôle PWA verts localement ; Vitest et Playwright toujours absents.
+- [-] CI GitHub Actions : Pint, PHPStan, PHPUnit MySQL/SQLite, ESLint, Prettier, typecheck, Vitest, build et contrôle PWA verts localement ; Playwright toujours absent.
 - [x] Tests de concurrence sur MySQL (`ConcurrentSaleTest`, deux processus sur le dernier article).
 
 ### Mise à jour 31/10/2026 — finalisation livrable V1
@@ -534,6 +535,164 @@
 - Les invariants de stock sont garantis par l'application, pas encore par des contraintes `CHECK` en base.
 - Les handlers de synchronisation doivent encore appliquer les permissions par événement (LOT 3).
 - Les moyens de paiement configurables, retours clients, unités et lots restent hors périmètre LOT 2.
+
+## Mise à jour du 02/11/2026 — LOT 3 terminé (contrat de synchronisation)
+
+> Validation finale : `83 tests, 460 assertions`, MySQL, sans dépréciation. Pint, PHPStan, ESLint, Prettier, typecheck, build et PWA verts.
+
+### Contrat serveur
+
+- [x] Permissions métier par type d'événement : vente, annulation, caisse, stock, inventaire.
+- [x] Validation du payload et de `schema_version` avant exécution.
+- [x] Types inconnus rejetés et enregistrés, plus aucun `default => null`.
+- [x] Résultats explicites : `applied`, `duplicate`, `rejected`, `conflict`, `failed`.
+- [x] Hash du payload pour empêcher la réutilisation d'un même `client_event_id` avec un contenu différent.
+- [x] Erreurs temporaires PDO conservées en `failed` et rejouables.
+- [x] Annulation de vente introuvable, double ouverture de caisse et mouvement sans session transformés en conflits visibles.
+
+### Curseur et données de référence
+
+- [x] Journal `sync_changes` avec curseur global monotone.
+- [x] Observers sur produits, clients, assureurs, règles d'assurance et stocks.
+- [x] Suppressions/deactivations propagées par tombstones et payload `is_active`.
+- [x] Pagination `next_cursor` / `has_more` sur les changements.
+- [x] Snapshot initial filtré par pharmacies accessibles.
+- [x] Client Dexie bascule sur `sync_cursor`, sans réutiliser l'ancien curseur `sync_version`.
+- [x] Jeton d'appareil du pull transmis par en-tête `X-Device-Token`, plus dans l'URL.
+
+### Conflits
+
+- [x] Écran de conflits avec payload local et actions Appliquer / Ajuster / Annuler.
+- [x] `applied` rejoue réellement l'événement via les services métier.
+- [x] `adjusted` remplace le payload puis rejoue l'événement.
+- [x] `cancelled` rejette l'événement sans effet métier.
+- [x] Échec de rejeu : conflit maintenu ouvert et erreur affichée.
+
+### Tests ajoutés
+
+- `tests/Feature/Sync/SyncPullContractTest.php`
+- `tests/Feature/Sync/SyncPushContractTest.php`
+- `tests/Feature/Sync/SyncConflictResolutionTest.php`
+
+### Limites restantes
+
+- Le snapshot initial n'est pas paginé ; seuls les changements le sont.
+- La résolution d'un conflit n'est pas encore renvoyée au poste concerné par le pull ; à traiter avec le cycle de vie de l'outbox au LOT 4.
+- Les événements `purchase.*`, `transfer.*` et `insurance.status` ne sont pas encore acceptés par la synchronisation offline ; ils sont explicitement rejetés.
+- Le jeton du push reste dans le corps POST ; seul le pull utilise l'en-tête.
+- Le vrai test de coupure/reprise réseau reste au LOT 5.
+
+## Mise à jour du 02/11/2026 — cohérence des actions frontend
+
+> Validation : `84 tests, 484 assertions`, Pint, PHPStan, ESLint, Prettier, typecheck, build et PWA verts.
+
+### Corrections
+
+- [x] Topbar : « Nouvelle vente » uniquement sur le tableau de bord et avec `make_sales`.
+- [x] Topbar : suppression du bouton Notifications inerte.
+- [x] Assurances : action locale « Gérer les assureurs » vers `/insurers`.
+- [x] Assurances : export du bordereau masqué sans `export_data`.
+- [x] Rapports : export CSV masqué sans `export_data`.
+- [x] Dashboard : liens Stocks/Achats masqués selon `manage_stock`, `manage_products` et `manage_purchases`.
+- [x] Stocks : raccourcis Achats/Transferts masqués sans permission.
+- [x] Stocks : actions Modifier / Désactiver réellement disponibles par produit.
+- [x] Vente : mode consultation seule sans `make_sales`, avec ventes récentes et accès aux rapports.
+- [x] Ticket : retour vers Rapports et bouton Nouvelle vente masqué sans `make_sales`.
+- [x] Transferts : boutons Expédier/Réceptionner/Annuler pilotés par les policies serveur.
+- [x] Sidebar : sections vides supprimées après filtrage par permissions.
+- [x] Pharmacies : libellé « Désactiver » au lieu de « Supprimer », état désactivé affiché.
+
+### Preuve serveur
+
+- `tests/Feature/Security/TransferActionFlagsTest.php` vérifie les flags d’action par pharmacie et par rôle.
+
+### Limite
+
+- Les masquages Vue sont validés par typecheck/build et revue, mais pas encore par des tests de composants ou Playwright. Ces tests arrivent avec le LOT 4/7.
+
+## Mise à jour du 02/11/2026 — LOT 4 terminé (cycle de vie offline)
+
+> Validation : `84 tests backend, 486 assertions` + `4 tests Vitest`, Pint, PHPStan, ESLint, Prettier, typecheck, build et PWA verts.
+
+### Cycle de vie Dexie
+
+- [x] Une base IndexedDB par utilisateur (`pharmagest-user-{id}`), isolation des données et de l'outbox.
+- [x] Schéma Dexie v2 avec migration testée : l'outbox survit à la mise à jour.
+- [x] Ouverture/fermeture de la base pilotée par l'utilisateur connecté.
+- [x] Token d'appareil stocké par utilisateur, avec révocation locale sur réponse 401.
+- [x] Ancienne base `pharmagest` conservée mais plus utilisée automatiquement.
+
+### Boucle de synchronisation
+
+- [x] Redémarrage propre au changement de pharmacie.
+- [x] Arrêt complet à la déconnexion et au démontage du shell.
+- [x] Listener `online` unique, supprimé à l'arrêt.
+- [x] Verrou multi-onglets via Web Locks quand disponible.
+- [x] Backoff exponentiel après erreur, plafonné à 5 minutes.
+- [x] État partagé et réactif `pending`, `syncing`, `lastSync`, `error`, partagé Topbar/Sidebar.
+- [x] Acquittement des conflits : le pull renvoie le statut serveur des événements locaux en conflit ou échoués, puis l'outbox est mise à jour.
+- [x] Réponse 401 : token local effacé pour permettre un nouvel enregistrement d'appareil.
+
+### PWA
+
+- [x] Suppression du cache runtime des réponses authentifiées `/api/sync/pull`.
+- [x] `npm run pwa:check` vérifie aussi que le service worker ne contient pas ce cache.
+- [x] Manifeste, icônes et service worker toujours validés.
+
+### Tests frontend
+
+- [x] Vitest + jsdom + fake-indexeddb installés.
+- [x] `npm test` ajouté à la CI et au README.
+- [x] Test d'isolation des données et outbox entre utilisateurs.
+- [x] Test de migration Dexie conservant l'outbox.
+- [x] Test des tokens par utilisateur et de leur révocation.
+- [x] Test du listener online unique et de l'arrêt complet.
+
+### Limites restantes
+
+- La base historique unique `pharmagest` n'est pas copiée automatiquement vers la base par utilisateur. Aucun outbox réel n'existe encore puisque la vente hors ligne arrive au LOT 5.
+- Le shell réellement chargé hors ligne et la mise à jour du service worker ne sont pas encore couverts par Playwright.
+- Les tests multi-onglets vérifient le verrou au niveau code, pas encore dans un vrai navigateur.
+- La vente hors ligne n'est toujours pas branchée sur Dexie ; c'est le LOT 5.
+
+## Mise à jour du 02/11/2026 — LOT 5 (vente hors ligne)
+
+> Validation : `84 tests backend, 490 assertions` + `8 tests Vitest`, Pint, PHPStan, ESLint, Prettier, typecheck, build et PWA verts.
+
+### Modèle et checkout local
+
+- [x] Dexie v3 : `local_sales`, `local_sale_items`, `local_payments`.
+- [x] Checkout atomique : vente, lignes, paiements, stock local et outbox dans une transaction.
+- [x] Identifiant `client_request_id` stable et réutilisé après erreur.
+- [x] Séquence d'outbox persistée pour préserver l'ordre des opérations.
+- [x] Catalogue local filtré par pharmacie et produits actifs.
+- [x] Recherche locale par nom, DCI et code-barres.
+- [x] Calculs locaux de remise et d'assurance alignés sur les règles serveur.
+- [x] Remise nécessitant approbation refusée hors ligne.
+- [x] Stock local insuffisant bloqué sans écriture partielle.
+- [x] Paramètres de remise descendus par le pull et mis en cache.
+
+### Interface et ticket
+
+- [x] Bascule automatique ligne/hors ligne dans `Vente.vue`.
+- [x] Bandeau hors ligne et compteur d'opérations.
+- [x] Liste des ventes locales non synchronisées ou à suivre.
+- [x] Ticket local imprimable avec statut « en attente », « synchronisé » ou « à régulariser ».
+- [x] Le ticket local est conservé après conflit.
+
+### Réconciliation
+
+- [x] ACK `sale.created` enrichi avec `sale_id` et `sale_number`.
+- [x] Vente locale passée à `synced` uniquement sur `applied` ou `duplicate`.
+- [x] Vente locale passée à `conflict` ou `rejected` avec erreur exploitable.
+- [x] Statut serveur des événements locaux renvoyé par le pull.
+
+### Limites restantes
+
+- Pas encore de test Playwright réel de coupure/rétablissement réseau et de double appareil.
+- Le shell PWA chargé après rechargement total hors ligne n'est pas validé en navigateur.
+- L'authentification hors ligne complète et la session expirée ne sont pas traitées.
+- La caisse et l'inventaire hors ligne restent au LOT 6.
 
 ## Conventions de mise à jour
 - Cocher `[x]` uniquement après validation (tests + build frontend).

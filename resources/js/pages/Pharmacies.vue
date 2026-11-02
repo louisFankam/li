@@ -11,7 +11,9 @@ const props = defineProps<{
 const form = useForm({ name: '', city: '', address: '', phone: '', is_active: true });
 const submit = () => form.post(route('pharmacies.store'), { onSuccess: () => form.reset() });
 function destroy(id: number) {
-    if (confirm('Supprimer ?')) router.delete(route('pharmacies.destroy', id));
+    if (confirm('Désactiver cette pharmacie ? Les données existantes seront conservées.')) {
+        router.delete(route('pharmacies.destroy', id));
+    }
 }
 </script>
 
@@ -36,7 +38,10 @@ function destroy(id: number) {
                         <div class="font-medium">{{ p.name }}</div>
                         <div class="text-xs text-muted-foreground">{{ p.city }} · {{ p.phone }}</div>
                     </div>
-                    <button @click="destroy(p.id)" class="rounded-sm border border-danger px-2.5 py-1.5 text-xs text-danger">Supprimer</button>
+                    <button v-if="p.is_active" @click="destroy(p.id)" class="rounded-sm border border-danger px-2.5 py-1.5 text-xs text-danger">
+                        Désactiver
+                    </button>
+                    <span v-else class="rounded-sm bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">Désactivée</span>
                 </div>
             </div>
         </div>

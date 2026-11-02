@@ -9,6 +9,7 @@ use App\Models\Pharmacy;
 use App\Models\Product;
 use App\Models\StockLevel;
 use App\Models\User;
+use App\Observers\SyncChangeObserver;
 use App\Observers\VersionObserver;
 use App\Support\Permissions;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -47,10 +48,11 @@ class AppServiceProvider extends ServiceProvider
         // Synchronisation offline : version à chaque écriture.
         foreach ([Product::class, Customer::class, InsuranceCompany::class, InsuranceRule::class, StockLevel::class] as $model) {
             $model::observe(VersionObserver::class);
+            $model::observe(SyncChangeObserver::class);
         }
 
         RateLimiter::for('sync', function (Request $request) {
-            $token = (string) ($request->input('device_token') ?? $request->query('device_token', ''));
+            $token = (string) ($request->input('device_token') ?? $request->header('X-Device-Token', ''));
             $key = $token !== ''
                 ? 'device:'.hash('sha256', $token)
                 : 'ip:'.$request->ip();

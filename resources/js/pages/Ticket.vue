@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft, Printer, Plus } from 'lucide-vue-next';
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 
 const props = defineProps<{
     sale: {
@@ -26,10 +27,15 @@ const props = defineProps<{
     };
 }>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Vente rapide', href: '/vente' },
+const { can } = usePermissions();
+const canSell = computed(() => can('make_sales'));
+const backHref = computed(() => (canSell.value ? '/vente' : '/rapports'));
+const backLabel = computed(() => (canSell.value ? 'Retour à la vente' : 'Retour aux rapports'));
+
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: canSell.value ? 'Vente rapide' : 'Rapports', href: backHref.value },
     { title: 'Ticket', href: `/vente/${props.sale.id}/ticket` },
-];
+]);
 
 const money = (value: number) => value.toLocaleString('fr-FR') + ' GNF';
 
@@ -59,8 +65,8 @@ onMounted(() => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto w-full max-w-2xl p-4 lg:p-8">
             <div class="no-print mb-4 flex items-center justify-between">
-                <Link href="/vente" class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-                    <ArrowLeft class="h-4 w-4" /> Retour à la vente
+                <Link :href="backHref" class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+                    <ArrowLeft class="h-4 w-4" /> {{ backLabel }}
                 </Link>
                 <div class="flex gap-2">
                     <button
@@ -70,7 +76,7 @@ onMounted(() => {
                     >
                         <Printer class="h-4 w-4" /> Imprimer
                     </button>
-                    <Link href="/vente" class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">
+                    <Link v-if="canSell" href="/vente" class="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">
                         <Plus class="h-4 w-4" /> Nouvelle vente
                     </Link>
                 </div>

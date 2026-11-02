@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $user_id
  * @property string $type
  * @property array<string, mixed> $payload
+ * @property string|null $payload_hash
  * @property int $schema_version
  * @property Carbon|null $occurred_at
  * @property Carbon|null $received_at
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  */
 class SyncEvent extends Model
 {
-    protected $fillable = ['client_event_id', 'pharmacy_id', 'device_id', 'user_id', 'type', 'payload', 'schema_version', 'occurred_at', 'received_at', 'status', 'error', 'attempts', 'processed_at'];
+    protected $fillable = ['client_event_id', 'pharmacy_id', 'device_id', 'user_id', 'type', 'payload', 'payload_hash', 'schema_version', 'occurred_at', 'received_at', 'status', 'error', 'attempts', 'processed_at'];
 
     protected $casts = [
         'payload' => 'array',

@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "pwa:check": "node scripts/check-pwa.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -48,8 +50,11 @@
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.12.0",
+    "fake-indexeddb": "^6.2.7",
+    "jsdom": "^26.1.0",
     "prettier": "^3.9.10",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "prettier-plugin-tailwindcss": "^0.8.1"
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "vitest": "^3.2.7"
   }
 }

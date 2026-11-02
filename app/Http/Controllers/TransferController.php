@@ -22,11 +22,12 @@ class TransferController extends Controller
 {
     use UsesActivePharmacy;
 
-    public function index()
+    public function index(Request $request)
     {
         $this->authorize('viewAny', Transfer::class);
         $context = $this->context();
         $ids = $context->accessibleIds();
+        $user = $request->user();
 
         $transfers = Transfer::with(['fromPharmacy', 'toPharmacy', 'items.product', 'requester'])
             ->where(function ($query) use ($ids) {
@@ -43,6 +44,9 @@ class TransferController extends Controller
                 'to' => $t->toPharmacy->name,
                 'to_id' => $t->to_pharmacy_id,
                 'status' => $t->status,
+                'can_ship' => $user->can('ship', $t),
+                'can_receive' => $user->can('receive', $t),
+                'can_cancel' => $user->can('cancel', $t),
                 'items' => $t->items->map(fn ($i) => [
                     'id' => $i->id,
                     'product' => $i->product->name,

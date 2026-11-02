@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePermissions } from '@/composables/usePermissions';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
@@ -22,6 +23,10 @@ const props = defineProps<{
     lastSales: { id: string; heure: string; client: string; items: number; total: string; mode: string; status: string }[];
     chart: { label: string; date: string; total: number }[];
 }>();
+
+const { can } = usePermissions();
+const canViewStocks = computed(() => can('manage_stock') || can('manage_products'));
+const canPurchase = computed(() => can('manage_purchases'));
 
 const maxChart = computed(() => Math.max(1, ...props.chart.map((c) => c.total)));
 
@@ -77,7 +82,7 @@ const ticketsDeltaLabel = computed(() => {
                 <div class="flex flex-col rounded-lg border border-border bg-card p-6">
                     <div class="flex items-center justify-between">
                         <div class="font-headings text-lg font-bold">Stocks faibles</div>
-                        <Link href="/stocks" class="text-sm font-medium text-primary hover:underline">Voir tout</Link>
+                        <Link v-if="canViewStocks" href="/stocks" class="text-sm font-medium text-primary hover:underline">Voir tout</Link>
                     </div>
                     <div class="text-sm text-muted-foreground">Blocage auto des ventes à 0</div>
                     <div class="mt-4 flex flex-1 flex-col gap-3">
@@ -92,12 +97,16 @@ const ticketsDeltaLabel = computed(() => {
                                 <div class="truncate text-sm font-medium">{{ p.name }}</div>
                                 <div class="text-xs text-muted-foreground">{{ p.pharma }} · Reste {{ p.stock }} / seuil {{ p.seuil }}</div>
                             </div>
-                            <Link href="/achats" class="rounded-sm border border-border px-2 py-1.5 text-xs font-medium hover:bg-muted"
+                            <Link
+                                v-if="canPurchase"
+                                href="/achats"
+                                class="rounded-sm border border-border px-2 py-1.5 text-xs font-medium hover:bg-muted"
                                 >Réassort</Link
                             >
                         </div>
                     </div>
                     <Link
+                        v-if="canPurchase"
                         href="/achats"
                         class="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-dark py-2.5 text-sm font-medium text-white hover:bg-dark/90"
                     >
